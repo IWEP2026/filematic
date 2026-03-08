@@ -121,10 +121,11 @@ SESSION_INFO_TEMPLATE = """\
 STEP_HINTS = {
     "personal": (
         "Select your camera card or source folder (e.g. DCIM) in the panel below, then click Run. "
-        "Reads the capture/creation date from every file — photos (RAW/JPG/HEIC), video (MP4/MOV/BRAW/R3D), "
-        "audio (MP3/WAV/FLAC), design files (PSD/AI/FIG/Sketch/Affinity), and motion projects "
-        "(AEP/PRPROJ/DRP/FCPX). Each file is renamed to YYYY-MM-DD_HHMMSS_NNN.ext and sorted into "
-        "Personal/YYYY/Week WW · Mon DD–DD/. Destination folders are created automatically. "
+        "Reads the capture/creation date from every file and sorts into Personal/YYYY/Week WW · Mon DD–DD/. "
+        "If you shoot with multiple cameras in the same session — e.g. a Fujifilm (RAF) and a Nikon (NEF) — "
+        "all files land in the same folder, ordered by the exact moment each was captured. "
+        "Format doesn't matter: RAW, JPG, video, audio, design files and motion projects are all supported "
+        "and always merged by date, never separated by camera or file type. "
         "Requires exiftool (brew install exiftool)."
     ),
     "new_event": (

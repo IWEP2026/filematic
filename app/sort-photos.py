@@ -24,6 +24,20 @@ Supports:
              FCPX (Final Cut), VEG (Vegas Pro), KDENlive, Shotcut (MLT),
              MOGRT, EDL, OTIO, FCP XML
 
+Multi-camera sessions:
+  Files from different cameras shot on the same day are merged into the same
+  weekly folder, sorted by exact capture time. If you shoot with a Fujifilm
+  (RAF) and a Nikon (NEF) in the same session, both appear together in the
+  correct chronological order. Format and camera model are irrelevant — only
+  the EXIF timestamp matters.
+
+Sidecar files travel with their source:
+  XMP (Lightroom/Capture One), PP3 (RawTherapee), DOP (DxO PhotoLab),
+  COS (Capture One), THM (camera thumbnails) are automatically moved
+  alongside their source file and renamed to match:
+    DSC_0042.RAF + DSC_0042.xmp  →  2026-03-08_143022_001.raf
+                                    2026-03-08_143022_001.xmp
+
 Date source priority:
   1. DateTimeOriginal (camera shutter / recorder start)
   2. CreateDate / ContentCreateDate (most video cameras)
@@ -274,12 +288,65 @@ def week_folder_name(dt: datetime):
     return f"Week {iso_week:02d} · {date_range}", iso_year
 
 
+# Sidecar extensions that travel with a source file.
+# When a media file is moved, any sidecar with the same stem is moved too,
+# renamed to match the new media filename (e.g. 2026-03-08_143022_001.xmp).
+SIDECAR_EXTENSIONS = {
+    '.xmp',    # Lightroom / Capture One / Bridge edit metadata
+    '.pp3',    # RawTherapee processing profile
+    '.pp',     # RawTherapee (older)
+    '.dop',    # DxO PhotoLab sidecar
+    '.cos',    # Capture One settings
+    '.lrprev', # Lightroom preview cache
+    '.thm',    # Camera-generated thumbnail (Canon, Sony)
+}
+
+
 def make_filename(dt: datetime, ext: str, seq: int):
     """
     Produces a clean, sortable filename.
     Example: 2021-07-24_111900_001.raf
     """
     return f"{dt.strftime('%Y-%m-%d_%H%M%S')}_{seq:03d}{ext.lower()}"
+
+
+def move_sidecars(source_file: Path, dest_file: Path, dry_run: bool):
+    """
+    After moving source_file → dest_file, look for any sidecar files
+    (same stem, known sidecar extension) in the same source directory
+    and move them to dest_file's folder with a matching renamed stem.
+
+    Example:
+      DSC_0042.RAF  →  2026-03-08_143022_001.raf
+      DSC_0042.xmp  →  2026-03-08_143022_001.xmp   (same folder)
+      DSC_0042.pp3  →  2026-03-08_143022_001.pp3
+    """
+    stem = source_file.stem
+    source_dir = source_file.parent
+    dest_stem = dest_file.stem   # e.g. "2026-03-08_143022_001"
+    dest_dir = dest_file.parent
+
+    # Normalise to lowercase for dedup — macOS Path.resolve() preserves the
+    # case you supply rather than the on-disk name, so "foo.XMP" and "foo.xmp"
+    # would compare as different even though they're the same file.
+    seen: set[str] = set()
+    for sidecar_ext in SIDECAR_EXTENSIONS:
+        # Check both lower and upper case (cameras write .XMP, .THM etc.)
+        for candidate in (stem + sidecar_ext, stem + sidecar_ext.upper()):
+            sidecar = source_dir / candidate
+            if not sidecar.exists():
+                continue
+            resolved_lower = str(sidecar.resolve()).lower()
+            if resolved_lower in seen:
+                continue
+            seen.add(resolved_lower)
+            sidecar_dest = dest_dir / (dest_stem + sidecar_ext.lower())
+            print(f"       + sidecar: {sidecar.name}  →  {sidecar_dest.name}")
+            if not dry_run:
+                if not sidecar_dest.exists():
+                    shutil.move(str(sidecar), str(sidecar_dest))
+                else:
+                    print(f"         (skipped — destination exists)")
 
 
 # ── Core ───────────────────────────────────────────────────────────
@@ -352,6 +419,9 @@ def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
             if not dry_run:
                 dest_folder.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(filepath), str(dest_file))
+
+            # Move sidecar files (XMP, PP3, DOP, etc.) alongside their source
+            move_sidecars(filepath, dest_file, dry_run)
 
             moved += 1
 

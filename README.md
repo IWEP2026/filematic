@@ -34,24 +34,32 @@ Everything runs locally. No cloud, no subscription, no account.
 ## What it does
 
 ### Sort Personal
-Reads the EXIF capture date from every photo and moves it into a clean weekly
-folder structure on your drive:
+Reads the capture/creation date from every file and sorts it into a clean
+weekly folder structure:
 
 ```
 Personal/
 └── 2026/
     └── Week 10 · Mon 02–08/
-        ├── 2026-03-02_143022_001.raf
+        ├── 2026-03-02_143022_001.raf    ← Fujifilm body
+        ├── 2026-03-02_143022_001.nef    ← Nikon second body, same session
         ├── 2026-03-02_143022_001.jpg
+        ├── 2026-03-02_143045_001.mp4    ← video from same shoot
         └── ...
 ```
 
-Duplicate detection is EXIF-based (timestamp + extension + file size), not
-filename-based. Re-ingesting the same card is safe — duplicates are skipped
-and logged, never overwritten.
+**Multi-camera sessions work automatically.** If you shoot with two bodies —
+say a Fujifilm (RAF) and a Nikon (NEF) — all files land in the same weekly
+folder, interleaved in the exact order each shot was taken. Camera model and
+file format are irrelevant. Only the EXIF timestamp matters.
 
-Supports: RAW (RAF, CR2, CR3, NEF, ARW, DNG, RW2, ORF, PEF), JPG, PNG,
-TIFF, HEIC.
+Duplicate detection is EXIF-based (timestamp + extension + file size). Re-ingesting
+the same card is safe — duplicates are skipped and logged, never overwritten.
+
+Supports all major RAW formats (Canon, Nikon, Sony, Fujifilm, Olympus, Panasonic,
+Pentax, Hasselblad, Phase One, Sigma, Leica, Minolta, Kodak and more), standard
+photos, video, audio, design files (PSD, FIG, Blender, Cinema 4D...) and motion
+projects (After Effects, Premiere, DaVinci, Final Cut...).
 
 ### New Event
 Creates a fully structured client event folder, ready for RAWs after the shoot.
