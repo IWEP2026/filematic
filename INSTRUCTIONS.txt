@@ -1,0 +1,193 @@
+═══════════════════════════════════════════════════════════════
+  FILE SORTING APP — Personal & Professional Workflow for Creatives
+  VS Code Claude Instructions
+═══════════════════════════════════════════════════════════════
+
+This file is for Claude when working on this project in VS Code.
+Read it in full before making any edits.
+
+───────────────────────────────────────────────────────────────
+WHAT THIS PROJECT IS
+───────────────────────────────────────────────────────────────
+
+A macOS desktop app (PostHaste.py) with supporting shell and Python
+scripts that automate a photography + creative file workflow. The app
+is a minimalist light-themed GUI launcher with an integrated folder
+browser (Adobe Bridge style). All scripts live in the same folder
+as PostHaste.py (the app/ subfolder).
+
+The app is launched via: app/Launch PostHaste.command (double-click)
+The built distributable is: PostHaste.app (at project root)
+The edit guide is: CLAUDE.md
+
+───────────────────────────────────────────────────────────────
+FOLDER STRUCTURE
+───────────────────────────────────────────────────────────────
+
+Photo Sorting App/
+├── PostHaste.app              — Built distributable (double-click to run)
+├── app/                       — All source files
+│   ├── PostHaste.py           — Main GUI app (tkinter + Pillow, light theme)
+│   ├── Launch PostHaste.command — Dev launcher (installs Pillow, runs app)
+│   ├── build_app.sh           — Builds PostHaste.app via PyInstaller
+│   ├── requirements.txt       — Python dependencies
+│   ├── sort-photos.py         — Sorts personal photos by EXIF date
+│   ├── new-event.sh           — Creates a new structured client event folder
+│   ├── organise-existing-event.sh — Restructures an existing event folder
+│   └── update-image-counts.sh — Updates image counts in _SESSION-INFO.md
+├── applescripts/              — Legacy AppleScripts (not actively used)
+├── CLAUDE.md                  — Edit guide: colours, fonts, buttons, scripts
+└── INSTRUCTIONS.txt           — This file
+
+───────────────────────────────────────────────────────────────
+FILES IN THIS PROJECT (legacy reference)
+───────────────────────────────────────────────────────────────
+
+sort-photos.py                — Sorts personal photos by EXIF date into weekly folders
+new-event.sh                  — Creates a new structured client event folder
+organise-existing-event.sh    — Restructures an existing flat-RAW event folder
+update-image-counts.sh        — Updates image counts in _SESSION-INFO.md files
+
+
+───────────────────────────────────────────────────────────────
+VOLUMES & PATHS
+───────────────────────────────────────────────────────────────
+
+Primary volume:      /Volumes/Photography
+Events root:         /Volumes/Photography/Events
+Personal root:       /Volumes/Photography/Personal
+
+The volume path is stored in settings at runtime:
+  ~/Library/Application Support/PostHaste/settings.json
+
+It is passed to shell scripts via the PHOTOGRAPHY_ROOT env var.
+Scripts fall back to /Volumes/Photography if the var is not set.
+
+NEVER hardcode /Volumes/Photography inside the scripts.
+Always use PHOTOGRAPHY_ROOT or the env var pattern already in place.
+
+
+───────────────────────────────────────────────────────────────
+FOLDER NAMING CONVENTIONS
+───────────────────────────────────────────────────────────────
+
+Events use this exact structure — do not change the format:
+
+  Events/
+  └── YYYY/
+      └── YYYY_Client-Name_ShootType/
+          └── NNNN_CLIENT_ShootType_YYYY-MM-DD/
+              ├── Completed/
+              │   └── Best Images/
+              ├── Unedited RAWs/
+              └── _SESSION-INFO.md
+
+Session number (NNNN) is zero-padded: 0001, 0002, etc.
+Client name in the parent folder: Title-Case-Hyphenated (e.g. Mia-Tom)
+Client name in the session subfolder: ALL-CAPS-HYPHENATED (e.g. MIA-TOM)
+
+Shoot types currently in use:
+  Wedding, Corporate, Model, Personal-Headshots,
+  Musician, Baptism, Media-Client
+
+Wedding events get 4 session subfolders:
+  0001_Prenuptials, 0002_Bridesmaids, 0003_Groomsmen, 0004_Wedding
+
+Corporate events get 2:
+  0001_Corporate-Event, 0002_Group-Headshots
+
+All others get 1 session subfolder.
+
+Personal photos sort into:
+  Personal/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.ext
+
+
+───────────────────────────────────────────────────────────────
+DUPLICATE DETECTION RULES
+───────────────────────────────────────────────────────────────
+
+Duplicates are NEVER detected by filename. Always EXIF/metadata
+confidence-based:
+
+  A file is a duplicate when ALL THREE match an existing file:
+    1. DateTimeOriginal (EXIF shutter timestamp, to the second)
+    2. File extension (.raf, .jpg, etc.)
+    3. File size in bytes
+
+All three must match. This means:
+  - A RAW and JPEG of the same shot are NOT flagged (different ext + size)
+  - Renamed files ARE caught (names are irrelevant)
+  - Re-ingesting the same card IS caught
+
+Duplicates are skipped entirely and logged to _duplicates.log
+in the destination folder. They are printed in Terminal with ⊘ DUPLICATE.
+
+The index is built once via a single batch exiftool call before any
+files are moved (see build_dest_index() in sort-photos.py).
+
+Do not change duplicate logic to be name-based. Ever.
+
+
+───────────────────────────────────────────────────────────────
+APP BEHAVIOUR RULES
+───────────────────────────────────────────────────────────────
+
+- Sort Personal, New Event, Organise Event all open a Terminal window
+  (user sees progress, can interact with prompts)
+- Update Counts runs silently in a background thread (no Terminal)
+- New Event disables the folder picker zone (no path needed)
+- The folder picker is click-to-browse only — no drag and drop
+- The Run button is disabled while Update Counts is running
+
+Scripts are found relative to PostHaste.py's own location:
+  here = os.path.dirname(os.path.abspath(__file__))
+  def script(name): return os.path.join(here, name)
+
+This means all scripts MUST live in the same folder as PostHaste.py.
+Do not change this to an absolute path.
+
+
+───────────────────────────────────────────────────────────────
+STYLE RULES
+───────────────────────────────────────────────────────────────
+
+- Light theme: background #ffffff, panels #f5f5f7, text #1d1d1f
+- Fonts: SF Pro Display (UI), SF Pro Mono (paths). macOS system fonts only.
+- Accent: #0071e3 (Apple blue). Change both ACCENT and ACCENT_HOV together.
+- Window: 960×640 default, resizable, min 700×500.
+- No drag and drop (tkinterdnd2 removed — incompatible with Python 3.14)
+- No third-party fonts. No emojis in code unless already present.
+- Keep the interface minimal. Do not add features unless asked.
+
+
+───────────────────────────────────────────────────────────────
+THINGS TO NEVER DO
+───────────────────────────────────────────────────────────────
+
+- Do not hardcode /Volumes/Photography anywhere in the scripts
+- Do not use filenames as the basis for duplicate detection
+- Do not add drag-and-drop (tkinterdnd2 is broken on Python 3.14)
+- Do not swap SF Pro Display/Mono for third-party fonts
+- Do not change the folder naming convention structure
+- Do not remove the PHOTOGRAPHY_ROOT env var pattern
+- Do not make PostHaste.py launch scripts from a hardcoded volume path
+
+
+───────────────────────────────────────────────────────────────
+DEPENDENCIES
+───────────────────────────────────────────────────────────────
+
+Python:    Pillow (auto-installed by Launch PostHaste.command)
+CLI tool:  exiftool (brew install exiftool) — required by sort-photos.py
+Shell:     bash — required by new-event.sh, organise-existing-event.sh,
+                  update-image-counts.sh
+
+
+───────────────────────────────────────────────────────────────
+PERSONAL NOTES / FURTHER INSTRUCTIONS
+───────────────────────────────────────────────────────────────
+
+[Add your own rules, preferences, and notes below this line]
+
+
+═══════════════════════════════════════════════════════════════
