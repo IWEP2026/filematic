@@ -135,10 +135,26 @@ the root path in the app's settings — it can be any external drive or folder.
 
 ## Requirements
 
-- **macOS** (tested on macOS 13+)
-- **Python 3.10+** — comes with macOS, or install from [python.org](https://www.python.org)
+- **Python 3.8+** — install from [python.org](https://www.python.org) if needed
 - **Homebrew** — for installing exiftool ([brew.sh](https://brew.sh))
 - **exiftool** — for reading EXIF dates when sorting personal photos
+
+### macOS and architecture compatibility
+
+| macOS version | Intel | Apple Silicon | Notes |
+|---|---|---|---|
+| 15 Sequoia | ✓ | ✓ | |
+| 14 Sonoma | ✓ | ✓ | |
+| 13 Ventura | ✓ | ✓ | |
+| 12 Monterey | ✓ | ✓ | |
+| 11 Big Sur | ✓ | ✓ | First Apple Silicon release |
+| 10.15 Catalina | ✓ | — | Intel only. Use `Launch.command` to run; `.app` build may not work |
+| 10.14 and earlier | — | — | Not supported |
+
+The `.app` bundle built on Apple Silicon uses a universal2 binary, which runs
+natively on both Intel and Apple Silicon Macs (macOS 11+).
+
+For macOS 10.15 Catalina, skip the `.app` build and use `Launch.command` instead.
 
 ---
 
@@ -209,6 +225,32 @@ stay private. It is created automatically on first run.
 
 ---
 
+## Security
+
+**This app is intentionally local-only. It makes no network connections.**
+
+- All file operations happen on your local machine and connected drives only
+- No data is sent anywhere — no analytics, no telemetry, no cloud sync
+- No account, login, or internet connection is required or used
+- Settings are stored locally at `~/Library/Application Support/FileSortingApp/settings.json`
+- The backup feature uses `rsync` between two local/mounted drives only
+
+**What this means for contributors:**
+
+Do not add network features to this repository. This is a hard rule, not a
+preference. If you want to build a networked or cloud-connected variant, fork
+the project and make it clearly distinct. Network access (including HTTP
+requests, remote APIs, cloud storage, or telemetry of any kind) will not be
+merged into this codebase.
+
+The only subprocess calls the app makes are:
+- `exiftool` — local CLI tool, reads file metadata only
+- `rsync` — local drive-to-drive sync only
+- `bash` — runs local shell scripts only
+- `osascript` — opens a local Terminal window only
+
+---
+
 ## Contributing
 
 Pull requests welcome. A few things to keep in mind:
@@ -221,6 +263,7 @@ Pull requests welcome. A few things to keep in mind:
   GUI frameworks.
 - macOS system fonts (SF Pro Display, SF Pro Mono) are used throughout.
   Do not add third-party font dependencies.
+- **No network features.** See Security section above.
 - Keep the interface minimal. This is a utility, not a product.
 
 To suggest a new shoot type, operation, or workflow improvement — open an

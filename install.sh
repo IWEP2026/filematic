@@ -42,14 +42,23 @@ if command -v python3 &>/dev/null; then
   PY_VER=$(python3 --version 2>&1 | awk '{print $2}')
   ok "Python $PY_VER found"
 else
-  fail "Python 3 not found. Install from https://www.python.org/downloads/"
+  echo ""
+  echo "  Python 3 is not installed."
+  echo "  Download it from: https://www.python.org/downloads/"
+  echo "  Then re-run this script."
+  echo ""
+  fail "Python 3 required"
 fi
 
-# Check version is 3.10+
+# Check version is 3.8+
 PY_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
 PY_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
-if [[ "$PY_MAJOR" -lt 3 || ("$PY_MAJOR" -eq 3 && "$PY_MINOR" -lt 10) ]]; then
-  fail "Python 3.10 or later is required. Found: $(python3 --version)"
+if [[ "$PY_MAJOR" -lt 3 || ("$PY_MAJOR" -eq 3 && "$PY_MINOR" -lt 8) ]]; then
+  echo ""
+  echo "  Python 3.8 or later is required. Found: $(python3 --version)"
+  echo "  Download a newer version from: https://www.python.org/downloads/"
+  echo ""
+  fail "Python 3.8+ required"
 fi
 
 hr
@@ -124,8 +133,18 @@ if $BUILD_APP; then
   # PyInstaller needed for build only
   python3 -m pip install --quiet "pyinstaller>=6.0"
 
+  # Detect architecture and pass appropriate flag
+  NATIVE=$(uname -m)
+  if [[ "$NATIVE" == "arm64" ]]; then
+    BUILD_ARCH="--universal"
+    info "Apple Silicon — building universal binary (runs on Intel + Apple Silicon)"
+  else
+    BUILD_ARCH="--intel"
+    info "Intel Mac — building x86_64 binary"
+  fi
+
   cd "$APP_DIR"
-  bash build_app.sh
+  bash build_app.sh $BUILD_ARCH
 
   if [[ -d "$SCRIPT_DIR/File Sorting App.app" ]]; then
     ok "File Sorting App.app built successfully"
