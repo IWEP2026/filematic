@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 """
-sort-photos.py — Personal photo organiser
-─────────────────────────────────────────
-Renames files using their EXIF capture date and sorts them into:
+sort-photos.py — Personal media organiser
+──────────────────────────────────────────
+Renames files using their capture/creation date and sorts them into:
     Personal/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.ext
+
+Supports:
+  Photos  — RAW (RAF, CR2, CR3, NEF, ARW, DNG, RW2, ORF, PEF, SRW)
+             Standard (JPG, PNG, TIFF, HEIC, HEIF)
+  Video   — MP4, MOV, MKV, AVI, M4V, MTS, M2TS, 3GP, BRAW, R3D
+  Audio   — MP3, WAV, AIFF, M4A, FLAC, AAC, OGG
+
+Date source priority:
+  1. DateTimeOriginal (camera shutter / recorder start)
+  2. CreateDate / ContentCreateDate (most video cameras)
+  3. MediaCreateDate / TrackCreateDate (container-level)
+  4. File modification date (last resort — logged as [MTIME])
 
 Requires: exiftool  →  brew install exiftool
 
@@ -15,7 +27,7 @@ Requires: exiftool  →  brew install exiftool
   Preview without moving anything (dry run):
     python3 sort-photos.py --dry-run /Volumes/Photography/Personal
 
-  Ingest from a memory card (move files onto the SSD):
+  Ingest from a memory card or drive (move files onto the SSD):
     python3 sort-photos.py --ingest /Volumes/CARD /Volumes/Photography/Personal
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -32,11 +44,35 @@ from pathlib import Path
 
 # File types to process
 IMAGE_EXTENSIONS = {
-    # Fujifilm + common RAW formats
-    '.raf', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.rw2', '.orf', '.pef',
-    # Standard
+    # RAW formats
+    '.raf', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.rw2', '.orf', '.pef', '.srw',
+    # Standard photo
     '.jpg', '.jpeg', '.png', '.tif', '.tiff', '.heic', '.heif',
 }
+
+VIDEO_EXTENSIONS = {
+    '.mp4', '.mov', '.mkv', '.avi', '.m4v',
+    '.mts', '.m2ts',                          # AVCHD (Sony, Panasonic)
+    '.3gp',                                   # Mobile
+    '.braw',                                  # Blackmagic RAW
+    '.r3d',                                   # RED RAW
+}
+
+AUDIO_EXTENSIONS = {
+    '.mp3', '.wav', '.aiff', '.aif',
+    '.m4a', '.flac', '.aac', '.ogg',
+}
+
+MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
+
+# exiftool date tags in priority order (first non-empty value wins)
+DATE_TAGS = [
+    'DateTimeOriginal',     # Camera shutter / recorder start — most accurate
+    'CreateDate',           # Common in video (QuickTime, MP4)
+    'ContentCreateDate',    # Some Sony/Canon video
+    'MediaCreateDate',      # MP4 container level
+    'TrackCreateDate',      # MP4 track level
+]
 
 # ── Helpers ────────────────────────────────────────────────────────
 
@@ -49,26 +85,36 @@ def check_exiftool():
         sys.exit(1)
 
 
-def get_exif_date(filepath: Path):
+def get_media_date(filepath: Path):
     """
-    Read DateTimeOriginal from EXIF. This is the moment the shutter fired —
-    always accurate regardless of when the file was copied or what the
-    filesystem says.
+    Read the capture/creation date from any media file via exiftool.
+    Tries DATE_TAGS in priority order — first non-empty value wins.
+    Falls back to file modification date if nothing is found.
 
-    Falls back to file modification date if EXIF is missing.
+    Returns (datetime, source_label) where source_label is the tag name
+    that provided the date, or 'mtime' if we fell back to filesystem time.
     """
+    tag_flags = [f'-{tag}' for tag in DATE_TAGS]
     result = subprocess.run(
-        ['exiftool', '-DateTimeOriginal', '-s3', '-d', '%Y:%m:%d %H:%M:%S', str(filepath)],
+        ['exiftool'] + tag_flags + ['-s', '-d', '%Y:%m:%d %H:%M:%S', str(filepath)],
         capture_output=True, text=True
     )
-    raw = result.stdout.strip()
-    if raw:
-        try:
-            return datetime.strptime(raw, '%Y:%m:%d %H:%M:%S'), 'exif'
-        except ValueError:
-            pass
 
-    # No EXIF — fall back to file modification date
+    # Output format: "TagName                         : 2026:03:08 14:30:22"
+    for line in result.stdout.splitlines():
+        if ':' not in line:
+            continue
+        tag_part, _, value_part = line.partition(':')
+        value = value_part.strip()
+        tag = tag_part.strip()
+        if not value or value.startswith('0000'):
+            continue
+        try:
+            return datetime.strptime(value, '%Y:%m:%d %H:%M:%S'), tag
+        except ValueError:
+            continue
+
+    # Nothing found — fall back to filesystem modification time
     mtime = os.path.getmtime(filepath)
     return datetime.fromtimestamp(mtime), 'mtime'
 
@@ -110,21 +156,27 @@ def make_filename(dt: datetime, ext: str, seq: int):
 # ── Core ───────────────────────────────────────────────────────────
 
 def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
-    # Gather all image files recursively
+    # Gather all media files recursively
     files = sorted([
         f for f in source_dir.rglob('*')
-        if f.is_file() and f.suffix.lower() in IMAGE_EXTENSIONS
+        if f.is_file() and f.suffix.lower() in MEDIA_EXTENSIONS
     ])
 
     if not files:
-        print(f"  No image files found in {source_dir}")
+        print(f"  No media files found in {source_dir}")
+        print(f"  Supported: photos (RAW/JPG/HEIC), video (MP4/MOV/MKV/BRAW/R3D...), audio (MP3/WAV/FLAC...)")
         return
+
+    # Summarise by type
+    photos = sum(1 for f in files if f.suffix.lower() in IMAGE_EXTENSIONS)
+    videos = sum(1 for f in files if f.suffix.lower() in VIDEO_EXTENSIONS)
+    audios = sum(1 for f in files if f.suffix.lower() in AUDIO_EXTENSIONS)
 
     mode = "INGEST" if ingest else "SORT"
     print(f"\n{'[DRY RUN] ' if dry_run else ''}Mode: {mode}")
     print(f"Source:      {source_dir}")
     print(f"Destination: {dest_dir}")
-    print(f"Files found: {len(files)}\n")
+    print(f"Files found: {len(files)}  (photos: {photos}  video: {videos}  audio: {audios})\n")
 
     moved = skipped = errors = 0
 
@@ -133,7 +185,7 @@ def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
 
     for filepath in files:
         try:
-            dt, date_source = get_exif_date(filepath)
+            dt, date_source = get_media_date(filepath)
             week_name, iso_year = week_folder_name(dt)
 
             dest_folder = dest_dir / str(iso_year) / week_name
@@ -152,7 +204,7 @@ def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
 
             dest_file = dest_folder / candidate
 
-            flag = f"[{date_source.upper()}]" if date_source == 'mtime' else ""
+            flag = f"[{date_source.upper()}]" if date_source == 'mtime' else f"[{date_source}]" if date_source != 'DateTimeOriginal' else ""
             print(f"  {'[DRY RUN] ' if dry_run else ''}→  {filepath.name}  {flag}")
             print(f"       {dest_file}")
 

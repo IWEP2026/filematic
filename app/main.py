@@ -120,9 +120,10 @@ SESSION_INFO_TEMPLATE = """\
 
 STEP_HINTS = {
     "personal": (
-        "Select your camera card's image folder (e.g. DCIM) in the panel below, then click Run. "
-        "Terminal opens, reads the EXIF capture date from every photo, renames each file to "
-        "YYYY-MM-DD_HHMMSS_NNN.ext, and moves it into Photography/Personal/YYYY/Week WW · Mon DD–DD/. "
+        "Select your camera card or source folder (e.g. DCIM) in the panel below, then click Run. "
+        "Terminal opens and reads the capture date from every file — photos (RAW/JPG/HEIC), "
+        "video (MP4/MOV/MKV/BRAW/R3D), and audio (MP3/WAV/FLAC). Each file is renamed to "
+        "YYYY-MM-DD_HHMMSS_NNN.ext and sorted into Personal/YYYY/Week WW · Mon DD–DD/. "
         "Requires exiftool (brew install exiftool)."
     ),
     "new_event": (
