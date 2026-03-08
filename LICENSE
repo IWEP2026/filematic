@@ -1,0 +1,106 @@
+Polyform Noncommercial License 1.0.0
+
+Copyright (c) 2026 — File Sorting App contributors
+
+Acceptance
+
+In order to get any license under these terms, you must agree
+to them as both strict obligations and conditions to all your licenses.
+
+Copyright License
+
+The licensor grants you a copyright license for the software to do
+everything you might do with the software that would otherwise infringe
+the licensor's copyright in it for any permitted purpose. However, you
+may only distribute the software according to Distribution License and
+make changes or new works based on the software according to Changes
+and New Works License.
+
+Distribution License
+
+The licensor grants you an additional copyright license to distribute
+copies of the software. Your license to distribute covers distributing
+the software with changes and new works permitted by Changes and New
+Works License.
+
+Notices
+
+You must ensure that anyone who gets a copy of any part of the software
+from you also gets a copy of these terms, as well as the following notice:
+
+    This software comes without any warranty, to the extent permitted by law.
+
+Changes and New Works License
+
+The licensor grants you an additional copyright license to make changes
+and new works based on the software for any permitted purpose.
+
+Patent License
+
+The licensor grants you a patent license for the software that covers
+patent claims the licensor can license, or will be able to license,
+that you would infringe by using the software.
+
+Permitted Purposes
+
+Any purpose is a permitted purpose except:
+
+1. Selling the software or access to it as a product or service.
+
+2. Bundling the software into a paid product or paid subscription service.
+
+3. Using the software to provide a commercial service to others
+   (including charging for support, hosting, or integration).
+
+4. Using the software or its outputs to train, fine-tune, or improve
+   any machine learning model, AI system, or commercial product without
+   explicit written permission from the original author(s).
+
+5. Any use that primarily benefits a commercial entity at the expense
+   of the open-source community this software is intended to serve.
+
+No other restrictions apply to personal, educational, research,
+or non-commercial use. Fork it. Adapt it. Share it.
+
+Notices
+
+You must ensure that anyone who gets a copy of any part of the software
+from you also gets a copy of these terms.
+
+No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your
+licenses to anyone else, or prevent the licensor from granting licenses
+to anyone else. These terms do not imply any other licenses.
+
+Patent Defense
+
+If you make any written claim that the software infringes or contributes
+to infringement of any patent, your patent license for the software granted
+under these terms ends immediately. If your employer makes such a claim, your
+patent license ends immediately for work on behalf of your employer.
+
+Violations
+
+The first time you are notified in writing that you have violated any of
+these terms, your license can nonetheless continue if you come into full
+compliance within 30 days after your notice. If you do not do so, your
+license ends immediately.
+
+No Liability
+
+As far as the law allows, the software comes as is, without any warranty
+or condition, and the licensor will not be liable to you for any damages
+arising out of these terms or the use or nature of the software, under
+any kind of legal claim.
+
+───────────────────────────────────────────────────────────────────────
+
+In plain English:
+
+  ✓ Free to use personally
+  ✓ Free to fork, modify, and share
+  ✓ Free to use in your own non-commercial projects
+  ✗ Cannot sell it or charge for access to it
+  ✗ Cannot bundle it into a paid product or SaaS
+  ✗ Cannot use it to train AI/ML models or commercial systems
