@@ -6,13 +6,23 @@ Renames files using their capture/creation date and sorts them into:
     Personal/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.ext
 
 Supports:
-  Photos  — RAW (RAF, CR2, CR3, NEF, ARW, DNG, RW2, ORF, PEF, SRW)
-             Standard (JPG, PNG, TIFF, HEIC, HEIF)
-  Video   — MP4, MOV, MKV, AVI, M4V, MTS, M2TS, 3GP, BRAW, R3D, WMV, WEBM
-  Audio   — MP3, WAV, AIFF, M4A, FLAC, AAC, OGG, WMA, OPUS, ALAC
-  Design  — PSD, PSB, AI, EPS, INDD, IDML, XD, FIG, Sketch,
-             Affinity (AFDESIGN, AFPHOTO, AFPUB), SVG, PDF
-  Motion  — AEP, PRPROJ, DRP (DaVinci), FCPX, Motion, MOGRT
+  Photos  — Canon (CR2/CR3/CRW), Nikon (NEF/NRW), Sony (ARW/SR2/SRF),
+             Fujifilm (RAF), Olympus (ORF), Panasonic (RW2), Pentax (PEF/PTX),
+             Hasselblad (3FR/FFF), Phase One (IIQ/CAP/EIP), Mamiya (MEF),
+             Leaf (MOS), Sigma (X3F), Leica (RWL), Minolta (MRW), Kodak (KDC/DCR),
+             Samsung (SRW), Epson (ERF), Universal (DNG),
+             Standard (JPG/PNG/TIFF/HEIC/HEIF/WEBP/BMP)
+  Video   — MP4, MOV, MKV, AVI, M4V, MTS/M2TS (AVCHD), BRAW, R3D,
+             MXF (broadcast), DV, MPG/MPEG, WMV, WEBM, VOB, 3GP
+  Audio   — MP3, WAV, AIFF, FLAC, M4A, AAC, OGG, ALAC, OPUS, WMA,
+             DSF/DFF (DSD hi-res), APE, WV, TTA, CAF, AMR, MID/MIDI
+  Design  — PSD/PSB (Photoshop), AI/EPS (Illustrator), INDD (InDesign),
+             FIG (Figma), Sketch, Affinity suite, XCF (GIMP), KRA (Krita),
+             CDR (CorelDRAW), SVG, PDF, BLEND (Blender), C4D, MA/MB (Maya),
+             OBJ, FBX, GLB/GLTF, USD/USDZ (AR), LUT (CUBE/3DL/LOOK)
+  Motion  — AEP (After Effects), PRPROJ (Premiere), DRP (DaVinci),
+             FCPX (Final Cut), VEG (Vegas Pro), KDENlive, Shotcut (MLT),
+             MOGRT, EDL, OTIO, FCP XML
 
 Date source priority:
   1. DateTimeOriginal (camera shutter / recorder start)
@@ -47,29 +57,92 @@ from pathlib import Path
 
 # File types to process
 IMAGE_EXTENSIONS = {
-    # RAW formats
-    '.raf', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.rw2', '.orf', '.pef', '.srw',
+    # Canon
+    '.cr2', '.cr3', '.crw',
+    # Nikon
+    '.nef', '.nrw',
+    # Sony
+    '.arw', '.srf', '.sr2',
+    # Fujifilm
+    '.raf',
+    # Adobe / universal
+    '.dng',
+    # Olympus / OM System
+    '.orf', '.obm',
+    # Panasonic / Leica
+    '.rw2', '.rwl',
+    # Pentax
+    '.pef', '.ptx',
+    # Samsung
+    '.srw',
+    # Sigma
+    '.x3f',
+    # Minolta / Konica Minolta
+    '.mrw',
+    # Hasselblad
+    '.3fr', '.fff',
+    # Phase One
+    '.iiq', '.cap', '.eip',
+    # Mamiya / Leaf / Sinar
+    '.mef', '.mos', '.cs1',
+    # Kodak
+    '.kdc', '.dcr',
+    # Epson
+    '.erf',
     # Standard photo
     '.jpg', '.jpeg', '.png', '.tif', '.tiff', '.heic', '.heif',
+    '.webp', '.bmp', '.ico',
 }
 
 VIDEO_EXTENSIONS = {
+    # Common containers
     '.mp4', '.mov', '.mkv', '.avi', '.m4v',
-    '.mts', '.m2ts',                          # AVCHD (Sony, Panasonic)
-    '.3gp',                                   # Mobile
+    # AVCHD (Sony, Panasonic cameras)
+    '.mts', '.m2ts', '.ts', '.tp',
+    # Mobile
+    '.3gp', '.3g2',
+    # Professional / cinema RAW
     '.braw',                                  # Blackmagic RAW
     '.r3d',                                   # RED RAW
-    '.wmv', '.flv', '.webm',                  # Other common formats
+    # Broadcast / professional
+    '.mxf',                                   # Material Exchange Format
+    '.gxf',                                   # General Exchange Format
+    '.lxf',                                   # Leitch/Harris
+    '.dv',                                    # Digital Video (DV tape)
+    # MPEG
+    '.mpg', '.mpeg', '.m2v', '.m2p',
+    # Other
+    '.wmv', '.asf',                           # Windows Media
+    '.flv', '.f4v',                           # Flash (legacy)
+    '.webm', '.ogv',                          # Web / open
+    '.divx', '.xvid',                         # Legacy compressed
+    '.vob',                                   # DVD
+    '.rm', '.rmvb',                           # RealMedia
 }
 
 AUDIO_EXTENSIONS = {
-    '.mp3', '.wav', '.aiff', '.aif',
-    '.m4a', '.flac', '.aac', '.ogg',
-    '.wma', '.opus', '.alac',
+    # Lossy
+    '.mp3', '.aac', '.ogg', '.wma', '.opus', '.m4a',
+    '.amr', '.3ga',                           # Mobile / phone recordings
+    # Lossless
+    '.wav', '.aiff', '.aif', '.flac', '.alac',
+    '.ape',                                   # Monkey's Audio
+    '.wv',                                    # WavPack
+    '.tta',                                   # True Audio
+    # High-res / audiophile
+    '.dsf', '.dff',                           # DSD (Direct Stream Digital)
+    '.caf',                                   # Core Audio Format (Apple)
+    '.pcm', '.au',                            # Raw / legacy
+    # Project / MIDI
+    '.mid', '.midi',
+    # Other
+    '.mka',                                   # Matroska Audio
+    '.spx',                                   # Speex
+    '.mpc',                                   # Musepack
 }
 
 DESIGN_EXTENSIONS = {
-    # Adobe
+    # Adobe Creative Suite
     '.psd', '.psb',                           # Photoshop
     '.ai', '.eps',                            # Illustrator
     '.indd', '.idml',                         # InDesign
@@ -78,8 +151,27 @@ DESIGN_EXTENSIONS = {
     '.fig',                                   # Figma
     '.sketch',                                # Sketch
     '.afdesign', '.afphoto', '.afpub',        # Affinity suite
+    # Free / open source design
+    '.xcf',                                   # GIMP
+    '.kra',                                   # Krita
+    '.ora',                                   # OpenRaster
+    # CorelDRAW
+    '.cdr', '.cdrx',
     # Vector / print
     '.svg', '.pdf',
+    # 3D / spatial design
+    '.blend',                                 # Blender
+    '.c4d',                                   # Cinema 4D
+    '.ma', '.mb',                             # Autodesk Maya
+    '.max',                                   # 3ds Max
+    '.obj', '.fbx',                           # Universal 3D exchange
+    '.glb', '.gltf',                          # GL Transmission Format (web/AR)
+    '.stl',                                   # 3D printing
+    '.usd', '.usda', '.usdc', '.usdz',        # Universal Scene Description (Apple AR)
+    # Colour grading (LUTs)
+    '.cube', '.3dl', '.look',                 # LUT files
+    # Lightroom
+    '.lrcat', '.lrtemplate',
 }
 
 MOTION_EXTENSIONS = {
@@ -89,6 +181,12 @@ MOTION_EXTENSIONS = {
     '.fcpx', '.fcpbundle',                    # Final Cut Pro
     '.motion',                                # Apple Motion
     '.mogrt',                                 # Motion Graphics Template
+    '.veg',                                   # Vegas Pro (MAGIX)
+    '.kdenlive',                              # KDENlive (Linux / cross-platform)
+    '.mlt',                                   # Shotcut / MLT framework
+    '.edl',                                   # Edit Decision List
+    '.otio',                                  # OpenTimelineIO (cross-platform)
+    '.xml',                                   # FCP XML / interchange
 }
 
 MEDIA_EXTENSIONS = (
@@ -196,11 +294,13 @@ def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
     if not files:
         print(f"  No supported files found in {source_dir}")
         print(f"  Supported types:")
-        print(f"    Photos  — RAW, JPG, PNG, HEIC, TIFF")
-        print(f"    Video   — MP4, MOV, MKV, BRAW, R3D, WMV, WEBM...")
-        print(f"    Audio   — MP3, WAV, FLAC, AIFF, M4A...")
-        print(f"    Design  — PSD, AI, FIG, SKETCH, INDD, XD, Affinity...")
-        print(f"    Motion  — AEP, PRPROJ, DRP, FCPX, MOGRT...")
+        print(f"    Photos  — All major RAW formats (Canon/Nikon/Sony/Fuji/Hasselblad/Phase One...)")
+        print(f"               + JPG, PNG, TIFF, HEIC, WEBP, BMP")
+        print(f"    Video   — MP4, MOV, MKV, BRAW, R3D, MXF, DV, MPEG, WMV, WEBM, VOB...")
+        print(f"    Audio   — MP3, WAV, FLAC, AIFF, DSD, APE, CAF, MIDI...")
+        print(f"    Design  — PSD, AI, FIG, Sketch, GIMP, Krita, CorelDRAW, Blender,")
+        print(f"               Cinema 4D, Maya, FBX, USD/USDZ, LUT files...")
+        print(f"    Motion  — AEP, PRPROJ, DRP, FCPX, Vegas Pro, KDENlive, EDL, OTIO...")
         return
 
     # Summarise by type

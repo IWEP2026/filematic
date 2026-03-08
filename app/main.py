@@ -189,12 +189,36 @@ FILE_ICONS = {
     '.afdesign':'🎨', '.afphoto': '🎨', '.afpub': '🎨',
     '.svg':     '🎨',
     # Motion / video production
-    '.aep':    '🎞', '.aepx': '🎞',
-    '.prproj': '🎞',
-    '.drp':    '🎞',
-    '.fcpx':   '🎞', '.fcpbundle': '🎞',
-    '.motion': '🎞',
-    '.mogrt':  '🎞',
+    '.aep':      '🎞', '.aepx': '🎞',
+    '.prproj':   '🎞',
+    '.drp':      '🎞',
+    '.fcpx':     '🎞', '.fcpbundle': '🎞',
+    '.motion':   '🎞',
+    '.mogrt':    '🎞',
+    '.veg':      '🎞',
+    '.kdenlive': '🎞', '.mlt': '🎞',
+    '.edl':      '🎞', '.otio': '🎞', '.xml': '🎞',
+    # 3D design
+    '.blend':    '🧊', '.c4d': '🧊',
+    '.ma':       '🧊', '.mb': '🧊',
+    '.obj':      '🧊', '.fbx': '🧊',
+    '.glb':      '🧊', '.gltf': '🧊',
+    '.stl':      '🧊',
+    '.usd':      '🧊', '.usda': '🧊', '.usdc': '🧊', '.usdz': '🧊',
+    # Colour grading / LUTs
+    '.cube':     '🎨', '.3dl': '🎨', '.look': '🎨',
+    # Free design tools
+    '.xcf':      '🎨', '.kra': '🎨', '.ora': '🎨',
+    '.cdr':      '🎨', '.cdrx': '🎨',
+    # Broadcast / legacy video
+    '.mxf':      '🎬', '.gxf': '🎬', '.dv': '🎬',
+    '.mpg':      '🎬', '.mpeg': '🎬', '.vob': '🎬',
+    '.ts':       '🎬', '.tp': '🎬', '.rm': '🎬', '.rmvb': '🎬',
+    # Hi-res / specialist audio
+    '.dsf':      '🎵', '.dff': '🎵',
+    '.ape':      '🎵', '.wv': '🎵', '.tta': '🎵',
+    '.caf':      '🎵', '.mid': '🎵', '.midi': '🎵',
+    '.amr':      '🎵', '.mka': '🎵',
     # Archives
     '.zip':  '🗜', '.gz': '🗜', '.tar': '🗜', '.rar': '🗜', '.7z': '🗜',
     # Scripts / config
