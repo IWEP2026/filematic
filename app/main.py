@@ -121,9 +121,10 @@ SESSION_INFO_TEMPLATE = """\
 STEP_HINTS = {
     "personal": (
         "Select your camera card or source folder (e.g. DCIM) in the panel below, then click Run. "
-        "Terminal opens and reads the capture date from every file — photos (RAW/JPG/HEIC), "
-        "video (MP4/MOV/MKV/BRAW/R3D), and audio (MP3/WAV/FLAC). Each file is renamed to "
-        "YYYY-MM-DD_HHMMSS_NNN.ext and sorted into Personal/YYYY/Week WW · Mon DD–DD/. "
+        "Reads the capture/creation date from every file — photos (RAW/JPG/HEIC), video (MP4/MOV/BRAW/R3D), "
+        "audio (MP3/WAV/FLAC), design files (PSD/AI/FIG/Sketch/Affinity), and motion projects "
+        "(AEP/PRPROJ/DRP/FCPX). Each file is renamed to YYYY-MM-DD_HHMMSS_NNN.ext and sorted into "
+        "Personal/YYYY/Week WW · Mon DD–DD/. Destination folders are created automatically. "
         "Requires exiftool (brew install exiftool)."
     ),
     "new_event": (
@@ -164,16 +165,40 @@ IMAGE_EXTS = {
     '.orf', '.rw2', '.pef', '.srw', '.raf',
 }
 FILE_ICONS = {
-    '.pdf':  '📄',
-    '.xmp':  '🔧',
+    # Documents
+    '.pdf':  '📄', '.txt': '📝', '.md': '📝',
+    '.docx': '📋', '.doc': '📋', '.pages': '📋',
+    '.xlsx': '📊', '.csv': '📊', '.numbers': '📊',
+    # Sidecar / metadata
+    '.xmp':  '🔧', '.lrcat': '🔧', '.lrdata': '🔧',
+    # Video
     '.mp4':  '🎬', '.mov': '🎬', '.avi': '🎬', '.mkv': '🎬',
-    '.mp3':  '🎵', '.aac': '🎵', '.wav': '🎵',
-    '.md':   '📝', '.txt': '📝',
-    '.zip':  '🗜',  '.gz': '🗜',  '.tar': '🗜',
-    '.psd':  '🎨', '.ai':  '🎨',
-    '.docx': '📋', '.doc': '📋',
-    '.xlsx': '📊', '.csv': '📊',
-    '.sh':   '⚙',  '.py':  '⚙',
+    '.m4v':  '🎬', '.mts': '🎬', '.m2ts': '🎬', '.3gp': '🎬',
+    '.braw': '🎬', '.r3d': '🎬', '.wmv': '🎬', '.webm': '🎬', '.flv': '🎬',
+    # Audio
+    '.mp3':  '🎵', '.aac': '🎵', '.wav': '🎵', '.aiff': '🎵', '.aif': '🎵',
+    '.flac': '🎵', '.m4a': '🎵', '.ogg': '🎵', '.wma': '🎵', '.opus': '🎵',
+    # Adobe design
+    '.psd':  '🎨', '.psb': '🎨',
+    '.ai':   '🎨', '.eps': '🎨',
+    '.indd': '🎨', '.idml': '🎨',
+    '.xd':   '🎨',
+    # Other design tools
+    '.fig':     '🎨',
+    '.sketch':  '🎨',
+    '.afdesign':'🎨', '.afphoto': '🎨', '.afpub': '🎨',
+    '.svg':     '🎨',
+    # Motion / video production
+    '.aep':    '🎞', '.aepx': '🎞',
+    '.prproj': '🎞',
+    '.drp':    '🎞',
+    '.fcpx':   '🎞', '.fcpbundle': '🎞',
+    '.motion': '🎞',
+    '.mogrt':  '🎞',
+    # Archives
+    '.zip':  '🗜', '.gz': '🗜', '.tar': '🗜', '.rar': '🗜', '.7z': '🗜',
+    # Scripts / config
+    '.sh':   '⚙',  '.py': '⚙', '.json': '⚙', '.yaml': '⚙', '.toml': '⚙',
 }
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -925,6 +950,7 @@ class App(tk.Tk):
             dest = self.settings.get("backup_dest", "").strip()
             if not dest:
                 self._set_status("Set a Backup Destination in Settings first", RED); return
+            Path(dest).mkdir(parents=True, exist_ok=True)
             src = vol.rstrip("/") + "/"
             cmd = f"rsync -av --progress {shlex.quote(src)} {shlex.quote(dest)}"
             self._to_terminal(cmd)

@@ -8,8 +8,11 @@ Renames files using their capture/creation date and sorts them into:
 Supports:
   Photos  — RAW (RAF, CR2, CR3, NEF, ARW, DNG, RW2, ORF, PEF, SRW)
              Standard (JPG, PNG, TIFF, HEIC, HEIF)
-  Video   — MP4, MOV, MKV, AVI, M4V, MTS, M2TS, 3GP, BRAW, R3D
-  Audio   — MP3, WAV, AIFF, M4A, FLAC, AAC, OGG
+  Video   — MP4, MOV, MKV, AVI, M4V, MTS, M2TS, 3GP, BRAW, R3D, WMV, WEBM
+  Audio   — MP3, WAV, AIFF, M4A, FLAC, AAC, OGG, WMA, OPUS, ALAC
+  Design  — PSD, PSB, AI, EPS, INDD, IDML, XD, FIG, Sketch,
+             Affinity (AFDESIGN, AFPHOTO, AFPUB), SVG, PDF
+  Motion  — AEP, PRPROJ, DRP (DaVinci), FCPX, Motion, MOGRT
 
 Date source priority:
   1. DateTimeOriginal (camera shutter / recorder start)
@@ -56,14 +59,42 @@ VIDEO_EXTENSIONS = {
     '.3gp',                                   # Mobile
     '.braw',                                  # Blackmagic RAW
     '.r3d',                                   # RED RAW
+    '.wmv', '.flv', '.webm',                  # Other common formats
 }
 
 AUDIO_EXTENSIONS = {
     '.mp3', '.wav', '.aiff', '.aif',
     '.m4a', '.flac', '.aac', '.ogg',
+    '.wma', '.opus', '.alac',
 }
 
-MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
+DESIGN_EXTENSIONS = {
+    # Adobe
+    '.psd', '.psb',                           # Photoshop
+    '.ai', '.eps',                            # Illustrator
+    '.indd', '.idml',                         # InDesign
+    '.xd',                                    # Adobe XD
+    # Figma / Sketch / Affinity
+    '.fig',                                   # Figma
+    '.sketch',                                # Sketch
+    '.afdesign', '.afphoto', '.afpub',        # Affinity suite
+    # Vector / print
+    '.svg', '.pdf',
+}
+
+MOTION_EXTENSIONS = {
+    '.aep', '.aepx',                          # After Effects
+    '.prproj',                                # Premiere Pro
+    '.drp',                                   # DaVinci Resolve
+    '.fcpx', '.fcpbundle',                    # Final Cut Pro
+    '.motion',                                # Apple Motion
+    '.mogrt',                                 # Motion Graphics Template
+}
+
+MEDIA_EXTENSIONS = (
+    IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
+    | DESIGN_EXTENSIONS | MOTION_EXTENSIONS
+)
 
 # exiftool date tags in priority order (first non-empty value wins)
 DATE_TAGS = [
@@ -163,20 +194,30 @@ def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
     ])
 
     if not files:
-        print(f"  No media files found in {source_dir}")
-        print(f"  Supported: photos (RAW/JPG/HEIC), video (MP4/MOV/MKV/BRAW/R3D...), audio (MP3/WAV/FLAC...)")
+        print(f"  No supported files found in {source_dir}")
+        print(f"  Supported types:")
+        print(f"    Photos  — RAW, JPG, PNG, HEIC, TIFF")
+        print(f"    Video   — MP4, MOV, MKV, BRAW, R3D, WMV, WEBM...")
+        print(f"    Audio   — MP3, WAV, FLAC, AIFF, M4A...")
+        print(f"    Design  — PSD, AI, FIG, SKETCH, INDD, XD, Affinity...")
+        print(f"    Motion  — AEP, PRPROJ, DRP, FCPX, MOGRT...")
         return
 
     # Summarise by type
-    photos = sum(1 for f in files if f.suffix.lower() in IMAGE_EXTENSIONS)
-    videos = sum(1 for f in files if f.suffix.lower() in VIDEO_EXTENSIONS)
-    audios = sum(1 for f in files if f.suffix.lower() in AUDIO_EXTENSIONS)
+    photos  = sum(1 for f in files if f.suffix.lower() in IMAGE_EXTENSIONS)
+    videos  = sum(1 for f in files if f.suffix.lower() in VIDEO_EXTENSIONS)
+    audios  = sum(1 for f in files if f.suffix.lower() in AUDIO_EXTENSIONS)
+    designs = sum(1 for f in files if f.suffix.lower() in DESIGN_EXTENSIONS)
+    motions = sum(1 for f in files if f.suffix.lower() in MOTION_EXTENSIONS)
 
     mode = "INGEST" if ingest else "SORT"
     print(f"\n{'[DRY RUN] ' if dry_run else ''}Mode: {mode}")
     print(f"Source:      {source_dir}")
     print(f"Destination: {dest_dir}")
-    print(f"Files found: {len(files)}  (photos: {photos}  video: {videos}  audio: {audios})\n")
+    parts = [f"photos: {photos}", f"video: {videos}", f"audio: {audios}"]
+    if designs: parts.append(f"design: {designs}")
+    if motions: parts.append(f"motion: {motions}")
+    print(f"Files found: {len(files)}  ({',  '.join(parts)})\n")
 
     moved = skipped = errors = 0
 
