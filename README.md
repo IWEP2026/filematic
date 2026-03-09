@@ -208,7 +208,7 @@ All other operations (Sort Personal, New Event, Split JPGs, Backup) work nativel
 ### macOS
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/filematic.git
+git clone https://github.com/IWEP2026/filematic.git
 cd filematic
 bash install.sh
 ```
@@ -225,7 +225,7 @@ To rebuild both apps at any time: `bash build-releases.sh`
 ### Linux
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/filematic.git
+git clone https://github.com/IWEP2026/filematic.git
 cd filematic
 bash install-linux.sh
 ```
@@ -236,7 +236,7 @@ After setup: `cd app && python3 main.py`
 ### Windows
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/filematic.git
+git clone https://github.com/IWEP2026/filematic.git
 cd filematic
 .\install-windows.ps1
 ```

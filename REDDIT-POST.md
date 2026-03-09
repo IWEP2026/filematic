@@ -90,7 +90,7 @@ Each session gets a Markdown info file to track client details, crew, equipment,
 
 macOS:
 ```bash
-git clone https://github.com/YOUR_USERNAME/filematic.git
+git clone https://github.com/IWEP2026/filematic.git
 cd filematic
 bash install.sh
 ```
@@ -107,7 +107,7 @@ Windows (PowerShell):
 
 Scripts handle Python, exiftool, and all dependencies automatically.
 
-Repo: **github.com/YOUR_USERNAME/filematic**
+Repo: **github.com/IWEP2026/filematic**
 
 ---
 
@@ -131,7 +131,7 @@ Tweet 1:
 I built a free macOS app to replace Adobe Bridge + Photo Mechanic.
 No subscription. No cloud. No account. Just clean file management.
 Open source, local-only.
-github.com/YOUR_USERNAME/filematic
+github.com/IWEP2026/filematic
 
 Tweet 2:
 What it does:
@@ -190,6 +190,6 @@ builds the .app — works on Intel and Apple Silicon).
 Noncommercial open source licence — free to use and fork, cannot be sold or
 used commercially.
 
-github.com/YOUR_USERNAME/filematic
+github.com/IWEP2026/filematic
 
 Happy to take feedback on the workflow structure if yours is different.
