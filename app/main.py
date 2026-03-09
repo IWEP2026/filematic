@@ -782,6 +782,69 @@ class App(tk.Tk):
 
         self._setup_window()
         self._build_ui()
+        self.after(200, self._check_exiftool_startup)
+
+    def _check_exiftool_startup(self):
+        if shutil.which("exiftool"):
+            return  # already installed — nothing to do
+
+        win = tk.Toplevel(self)
+        win.title("exiftool required")
+        win.configure(bg=BG)
+        win.resizable(False, False)
+        win.grab_set()
+
+        # Centre over main window
+        self.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width()  - 460) // 2
+        y = self.winfo_y() + (self.winfo_height() - 240) // 2
+        win.geometry(f"460x240+{x}+{y}")
+
+        tk.Label(win, text="One dependency needed",
+                 bg=BG, fg=TEXT, font=(F_UI, 14, "bold"),
+                 anchor="w").pack(anchor="w", padx=24, pady=(24, 4))
+        tk.Label(win,
+                 text="Filematic uses exiftool to read photo and video dates.\n"
+                      "It needs to be installed once — takes about 30 seconds.",
+                 bg=BG, fg=GREY, font=(F_UI, 12),
+                 justify="left").pack(anchor="w", padx=24, pady=(0, 16))
+
+        btn_frame = tk.Frame(win, bg=BG)
+        btn_frame.pack(fill="x", padx=24, pady=(0, 20))
+
+        def _install_brew():
+            win.destroy()
+            cmd = "brew install exiftool"
+            self._to_terminal(cmd)
+
+        def _open_download():
+            import webbrowser
+            webbrowser.open("https://exiftool.org")
+            win.destroy()
+
+        has_brew = bool(shutil.which("brew"))
+
+        if has_brew:
+            tk.Button(btn_frame, text="Install with Homebrew",
+                      bg=ACCENT, fg="#ffffff", font=(F_UI, 12),
+                      bd=0, relief="flat", padx=20, pady=8,
+                      activebackground=ACCENT_HOV, activeforeground="#ffffff",
+                      command=_install_brew).pack(side="left")
+            tk.Label(btn_frame, text="  or  ", bg=BG, fg=DIM,
+                     font=(F_UI, 11)).pack(side="left")
+
+        tk.Button(btn_frame,
+                  text="Download from exiftool.org" if not has_brew else "Download manually",
+                  bg=BTN_INACT, fg=TEXT, font=(F_UI, 12),
+                  bd=0, relief="flat", padx=20, pady=8,
+                  activebackground=BTN_PRESS, activeforeground=TEXT,
+                  command=_open_download).pack(side="left")
+
+        tk.Button(btn_frame, text="Later",
+                  bg=BG, fg=DIM, font=(F_UI, 11),
+                  bd=0, relief="flat", padx=12, pady=8,
+                  activebackground=BG, activeforeground=GREY,
+                  command=win.destroy).pack(side="right")
 
     def _jpg_dest(self):
         """Resolved JPG destination path (custom or default)."""
