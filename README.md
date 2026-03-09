@@ -1,10 +1,13 @@
-# File Sorting App
+# Filematic — Free media management for creatives
 
-A free, open-source macOS app for photographers who want clean, consistent file
-management — without paying for Adobe Bridge, Photo Mechanic, or similar tools.
+A free, open-source app for photographers, videographers, and creatives who want
+clean, consistent file management — without paying for Adobe Bridge, Photo
+Mechanic, or similar tools.
 
 Built for real creative workflows: ingesting RAWs, tracking client events,
 sorting personal shoots, and keeping your drives organised over time.
+
+Works on **macOS**, **Linux**, and **Windows**.
 
 ---
 
@@ -24,7 +27,8 @@ actually need day-to-day.
 | Manual folder restructuring | Organise Event — wraps loose RAWs in proper structure |
 | Lightroom metadata panels | Session Info — Markdown file per shoot with counts |
 | Bridge image count panels | Update Counts — live count of Best Images + RAWs |
-| Manual JPG separation | Split JPGs — moves JPGs out of Events/Personal |
+| Manual JPG separation | Split JPGs — moves camera JPGs out of Unedited RAWs |
+| Manual batch rename | Rename Edited — in-place EXIF date rename, no move |
 | Manual rsync backup | Backup — syncs your drive to a backup destination |
 
 Everything runs locally. No cloud, no subscription, no account.
@@ -39,13 +43,23 @@ weekly folder structure:
 
 ```
 Personal/
-└── 2026/
-    └── Week 10 · Mon 02–08/
-        ├── 2026-03-02_143022_001.raf    ← Fujifilm body
-        ├── 2026-03-02_143022_001.nef    ← Nikon second body, same session
-        ├── 2026-03-02_143022_001.jpg
-        ├── 2026-03-02_143045_001.mp4    ← video from same shoot
-        └── ...
+├── 2026/
+│   └── Week 10 · Mon 02–08/
+│       ├── 2026-03-02_143022_001.raf    ← Fujifilm body
+│       ├── 2026-03-02_143022_001.nef    ← Nikon second body, same session
+│       └── 2026-03-02_143022_001.jpg
+├── Video/
+│   └── 2026/
+│       └── Week 10 · Mon 02–08/
+│           └── 2026-03-02_143045_001.mp4
+├── Audio/
+│   └── 2026/
+│       └── Week 10 · Mon 02–08/
+│           └── 2026-03-02_150012_001.wav
+└── Design/
+    └── 2026/
+        └── Week 10 · Mon 02–08/
+            └── 2026-03-02_163000_001.psd
 ```
 
 **Multi-camera sessions work automatically.** If you shoot with two bodies —
@@ -68,18 +82,25 @@ Creates a fully structured client event folder, ready for RAWs after the shoot.
 Events/
 └── 2026/
     └── 2026-03-08_Smith-Jones_Wedding/
-        ├── 0001_SMITH-JONES_Prenuptials_2026-03-08/
+        ├── 0001_SMITH-JONES_Prenuptials_2026-03-08/   ← optional (toggle in form)
         │   ├── Completed/
         │   │   └── Best Images/
         │   ├── Unedited RAWs/
         │   └── _SESSION-INFO.md
         ├── 0002_SMITH-JONES_Bridesmaids_2026-03-08/
         ├── 0003_SMITH-JONES_Groomsmen_2026-03-08/
-        └── 0004_SMITH-JONES_Wedding_2026-03-08/
+        ├── 0004_SMITH-JONES_Ceremony_2026-03-08/
+        └── 0005_SMITH-JONES_Reception_2026-03-08/
 ```
 
-Shoot types: Wedding (4 sessions), Corporate (2 sessions), Model, Musician,
-Baptism, Personal Headshots, Media Client, and custom.
+Wedding events split Ceremony and Reception into separate sessions — each with
+their own `Completed/Best Images/` and `Unedited RAWs/` folders. Prenuptials
+sessions are optional (checkbox in the form).
+
+Default project types: Wedding, Corporate, Model, Personal-Headshots, Musician,
+Baptism, Media-Client, Other. **All of these are fully customisable in Settings**
+— edit the list, change the labels, rename Event folders to whatever suits your
+workflow.
 
 Each session gets a `_SESSION-INFO.md` file to track client details, crew,
 equipment, and image counts — readable in Finder and any text editor.
@@ -106,14 +127,22 @@ Reads the number of files in each session's `Best Images/` and
 Runs silently in the background — no Terminal window.
 
 ### Split JPGs
-Moves all JPG/JPEG files out of the currently selected folder into a
-separate destination (default: `Photography/JPGs/`). Useful if your camera
-shoots RAW+JPG and you want to separate them after ingesting.
+Moves JPG/JPEG files out of an event session's `Unedited RAWs/` folder into a
+separate destination (default: `Photography/JPGs/`). If no `Unedited RAWs/`
+subfolder exists it searches the whole selected folder. Files inside
+`Best Images/` are never touched.
+
+### Rename Edited
+Renames all media files in a selected folder in-place using their EXIF capture
+date — no files are moved, no subfolders are created. Companion sidecar files
+(XMP, PP3, DOP, etc.) are renamed to match automatically. Files already using
+the correct date-based name are skipped. Files inside `Best Images/` are always
+left untouched. Requires exiftool.
 
 ### Backup
-Syncs your Photography drive to a backup destination using `rsync`. Copies
-new files, updates changed ones, removes deleted ones. Shows live progress
-in the app.
+Syncs your Photography drive to a backup destination. Copies new files,
+updates changed ones, removes deleted ones. Shows live progress in the app.
+Uses `rsync` on macOS/Linux and `robocopy` on Windows.
 
 ---
 
@@ -133,9 +162,13 @@ the root path in the app's settings — it can be any external drive or folder.
 │               ├── Unedited RAWs/
 │               └── _SESSION-INFO.md
 ├── Personal/
-│   └── YYYY/
-│       └── Week WW · Mon DD–DD/
-│           └── YYYY-MM-DD_HHMMSS_NNN.ext
+│   ├── YYYY/
+│   │   └── Week WW · Mon DD–DD/
+│   │       └── YYYY-MM-DD_HHMMSS_NNN.ext    ← photos/RAWs
+│   ├── Video/YYYY/Week WW · Mon DD–DD/       ← video files
+│   ├── Audio/YYYY/Week WW · Mon DD–DD/       ← audio files
+│   ├── Design/YYYY/Week WW · Mon DD–DD/      ← design files
+│   └── Motion/YYYY/Week WW · Mon DD–DD/      ← motion projects
 └── JPGs/                    ← optional, for Split JPGs
 ```
 
@@ -144,76 +177,94 @@ the root path in the app's settings — it can be any external drive or folder.
 ## Requirements
 
 - **Python 3.8+** — install from [python.org](https://www.python.org) if needed
-- **Homebrew** — for installing exiftool ([brew.sh](https://brew.sh))
-- **exiftool** — for reading EXIF dates when sorting personal photos
+- **exiftool** — for reading EXIF dates when sorting photos/media
+- **Pillow** — installed automatically by the setup script
 
-### macOS and architecture compatibility
+---
 
-| macOS version | Intel | Apple Silicon | Notes |
-|---|---|---|---|
-| 15 Sequoia | ✓ | ✓ | |
-| 14 Sonoma | ✓ | ✓ | |
-| 13 Ventura | ✓ | ✓ | |
-| 12 Monterey | ✓ | ✓ | |
-| 11 Big Sur | ✓ | ✓ | First Apple Silicon release |
-| 10.15 Catalina | ✓ | — | Intel only. Use `Launch.command` to run; `.app` build may not work |
-| 10.14 and earlier | — | — | Not supported |
+## Platform support
 
-The `.app` bundle built on Apple Silicon uses a universal2 binary, which runs
-natively on both Intel and Apple Silicon Macs (macOS 11+).
+| Platform | Status | Notes |
+|---|---|---|
+| macOS 11+ Apple Silicon | ✓ Full | `Filematic.app` (arm64) |
+| macOS 11+ Intel | ✓ Full | `Filematic-Intel.app` (x86_64) |
+| macOS 10.15 Catalina | ✓ | Use `python3 main.py` — `.app` build may not work |
+| Linux (Ubuntu, Fedora, Arch, etc.) | ✓ Full | Run via `python3 main.py` |
+| Windows 10/11 | ✓ | Run via `python main.py`. Bash operations need WSL or Git for Windows |
 
-For macOS 10.15 Catalina, skip the `.app` build and use `Launch.command` instead.
+### Windows — bash operations
+
+Two operations use bash scripts under the hood: **Organise Event** and **Update Counts**.
+On Windows these require either:
+- **WSL** (Windows Subsystem for Linux) — `wsl --install` in an admin PowerShell
+- **Git for Windows** — includes Git Bash ([gitforwindows.org](https://gitforwindows.org))
+
+All other operations (Sort Personal, New Event, Split JPGs, Backup) work natively on Windows.
 
 ---
 
 ## Installation
 
-### Option 1 — One-command setup (recommended)
-
-Clone the repo and run the install script:
+### macOS
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/file-sorting-app.git
-cd file-sorting-app
+git clone https://github.com/YOUR_USERNAME/filematic.git
+cd filematic
 bash install.sh
 ```
 
-The script will:
-1. Check Python 3 is installed
-2. Install Homebrew if missing
-3. Install `exiftool` via Homebrew
-4. Install `Pillow` (Python image library)
-5. Make all scripts executable
-6. Build the `File Sorting App.app` bundle
+The script checks Python, installs Homebrew + exiftool, installs Pillow, and builds both app bundles:
+- `Filematic.app` — Apple Silicon (M1/M2/M3/M4)
+- `Filematic-Intel.app` — Intel Mac
 
-Then double-click `File Sorting App.app` to launch.
+Double-click the right one for your machine. Or run directly: `cd app && python3 main.py`
 
-### Option 2 — Run without building
+To skip the `.app` build: `bash install.sh --no-build`
+To rebuild both apps at any time: `bash build-releases.sh`
 
-If you don't want to build the `.app`:
+### Linux
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/file-sorting-app.git
-cd file-sorting-app/app
-bash install.sh --no-build
-double-click Launch.command
+git clone https://github.com/YOUR_USERNAME/filematic.git
+cd filematic
+bash install-linux.sh
 ```
 
-Or from Terminal:
+The script detects your package manager (apt/dnf/pacman/zypper) and installs exiftool automatically.
+After setup: `cd app && python3 main.py`
 
-```bash
-cd file-sorting-app/app
-python3 main.py
+### Windows
+
+```powershell
+git clone https://github.com/YOUR_USERNAME/filematic.git
+cd filematic
+.\install-windows.ps1
 ```
+
+Or if PowerShell execution is restricted:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\install-windows.ps1
+```
+
+After setup: `cd app && python main.py`
 
 ---
 
 ## Updating
 
 ```bash
-cd file-sorting-app
+cd filematic
 git pull
+
+# macOS
 bash install.sh
+
+# Linux
+bash install-linux.sh
+
+# Windows
+.\install-windows.ps1
 ```
 
 The install script is safe to re-run. It won't overwrite your settings.
@@ -222,14 +273,24 @@ The install script is safe to re-run. It won't overwrite your settings.
 
 ## Settings
 
-Runtime settings are stored at:
+Open the Settings panel inside the app. Everything is configurable:
 
-```
-~/Library/Application Support/FileSortingApp/settings.json
-```
+| Setting | Default | What it controls |
+|---------|---------|-----------------|
+| Photography Volume | `/Volumes/Photography` | Root path for all operations |
+| Backup Destination | — | Target drive for Backup |
+| JPG Split Destination | `volume/JPGs` | Where Split JPGs sends files |
+| Personal Folder Name | `Personal` | Subfolder name for Sort Personal |
+| Events Folder Name | `Events` | Subfolder name for New Event |
+| Client Label | `Client Name` | Label in New Event form (e.g. Artist, Couple) |
+| Project Types | Wedding, Corporate… | Comma-separated dropdown list for New Event |
 
-This file is not committed to the repo — your drive paths and preferences
-stay private. It is created automatically on first run.
+Settings are stored at:
+- macOS:   `~/Library/Application Support/Filematic/settings.json`
+- Linux:   `~/.config/Filematic/settings.json`
+- Windows: `%APPDATA%\Filematic\settings.json`
+
+This file is not committed to the repo. It is created automatically on first run.
 
 ---
 
@@ -240,8 +301,11 @@ stay private. It is created automatically on first run.
 - All file operations happen on your local machine and connected drives only
 - No data is sent anywhere — no analytics, no telemetry, no cloud sync
 - No account, login, or internet connection is required or used
-- Settings are stored locally at `~/Library/Application Support/FileSortingApp/settings.json`
-- The backup feature uses `rsync` between two local/mounted drives only
+- Settings are stored locally:
+  - macOS: `~/Library/Application Support/Filematic/settings.json`
+  - Linux: `~/.config/Filematic/settings.json`
+  - Windows: `%APPDATA%\Filematic\settings.json`
+- The backup feature uses `rsync` (macOS/Linux) or `robocopy` (Windows) — local drives only
 
 **What this means for contributors:**
 
@@ -253,9 +317,9 @@ merged into this codebase.
 
 The only subprocess calls the app makes are:
 - `exiftool` — local CLI tool, reads file metadata only
-- `rsync` — local drive-to-drive sync only
+- `rsync` / `robocopy` — local drive-to-drive sync only
 - `bash` — runs local shell scripts only
-- `osascript` — opens a local Terminal window only
+- `osascript` / terminal emulator — opens a local Terminal window only
 
 ---
 
@@ -269,8 +333,8 @@ Pull requests welcome. A few things to keep in mind:
   it. Do not change the structure.
 - The app uses Python's built-in `tkinter` + `Pillow` only. No additional
   GUI frameworks.
-- macOS system fonts (SF Pro Display, SF Pro Mono) are used throughout.
-  Do not add third-party font dependencies.
+- Fonts use the system default per platform (SF Pro on macOS, Segoe UI on
+  Windows, Helvetica on Linux). Do not add third-party font dependencies.
 - **No network features.** See Security section above.
 - Keep the interface minimal. This is a utility, not a product.
 

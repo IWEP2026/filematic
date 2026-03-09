@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-#  Filematic — Installer
+#  Filematic — Linux Installer
 #  Run once after cloning the repo.
 #  Safe to re-run for updates.
 # ═══════════════════════════════════════════════════════════════
@@ -9,28 +9,15 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$SCRIPT_DIR/app"
-BUILD_APP=true
-
-# ── Parse flags ────────────────────────────────────────────────
-
-for arg in "$@"; do
-  case $arg in
-    --no-build) BUILD_APP=false ;;
-  esac
-done
-
-# ── Helpers ────────────────────────────────────────────────────
 
 ok()   { echo "  ✓  $1"; }
 info() { echo "  →  $1"; }
 fail() { echo "  ✗  $1"; exit 1; }
 hr()   { echo ""; echo "  ─────────────────────────────────────────"; echo ""; }
 
-# ── Header ─────────────────────────────────────────────────────
-
 echo ""
 echo "  ═══════════════════════════════════════════"
-echo "    Filematic — Setup"
+echo "    Filematic — Linux Setup"
 echo "  ═══════════════════════════════════════════"
 echo ""
 
@@ -42,46 +29,34 @@ if command -v python3 &>/dev/null; then
   PY_VER=$(python3 --version 2>&1 | awk '{print $2}')
   ok "Python $PY_VER found"
 else
-  echo ""
   echo "  Python 3 is not installed."
-  echo "  Download it from: https://www.python.org/downloads/"
-  echo "  Then re-run this script."
-  echo ""
+  echo "  Install it with your package manager, e.g.:"
+  echo "    sudo apt install python3 python3-pip     # Debian/Ubuntu"
+  echo "    sudo dnf install python3                 # Fedora"
+  echo "    sudo pacman -S python                    # Arch"
   fail "Python 3 required"
 fi
 
-# Check version is 3.8+
 PY_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
 PY_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
 if [[ "$PY_MAJOR" -lt 3 || ("$PY_MAJOR" -eq 3 && "$PY_MINOR" -lt 8) ]]; then
-  echo ""
-  echo "  Python 3.8 or later is required. Found: $(python3 --version)"
-  echo "  Download a newer version from: https://www.python.org/downloads/"
-  echo ""
-  fail "Python 3.8+ required"
+  fail "Python 3.8+ required. Found: $(python3 --version)"
 fi
 
 hr
 
-# ── 2. Homebrew ────────────────────────────────────────────────
+# ── 2. tkinter ─────────────────────────────────────────────────
 
-info "Checking Homebrew..."
+info "Checking tkinter..."
 
-if command -v brew &>/dev/null; then
-  ok "Homebrew found at $(command -v brew)"
+if python3 -c "import tkinter" 2>/dev/null; then
+  ok "tkinter available"
 else
-  echo ""
-  echo "  Homebrew is not installed. Installing now..."
-  echo "  (You may be asked for your Mac password)"
-  echo ""
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-  # Add brew to PATH for Apple Silicon Macs
-  if [[ -f /opt/homebrew/bin/brew ]]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-  fi
-
-  ok "Homebrew installed"
+  echo "  tkinter not found. Install it with:"
+  echo "    sudo apt install python3-tk              # Debian/Ubuntu"
+  echo "    sudo dnf install python3-tkinter         # Fedora"
+  echo "    sudo pacman -S tk                        # Arch"
+  fail "tkinter required"
 fi
 
 hr
@@ -93,8 +68,21 @@ info "Checking exiftool..."
 if command -v exiftool &>/dev/null; then
   ok "exiftool $(exiftool -ver) found"
 else
-  info "Installing exiftool..."
-  brew install exiftool
+  info "exiftool not found. Trying to install..."
+  if command -v apt-get &>/dev/null; then
+    sudo apt-get install -y libimage-exiftool-perl
+  elif command -v dnf &>/dev/null; then
+    sudo dnf install -y perl-Image-ExifTool
+  elif command -v pacman &>/dev/null; then
+    sudo pacman -S --noconfirm perl-image-exiftool
+  elif command -v zypper &>/dev/null; then
+    sudo zypper install -y exiftool
+  else
+    echo ""
+    echo "  Could not auto-install exiftool."
+    echo "  Install it manually for your distro, then re-run this script."
+    fail "exiftool required"
+  fi
   ok "exiftool installed"
 fi
 
@@ -103,7 +91,6 @@ hr
 # ── 4. Pillow ──────────────────────────────────────────────────
 
 info "Installing Python dependencies..."
-
 python3 -m pip install --quiet --upgrade pip
 python3 -m pip install --quiet "Pillow>=10.0"
 ok "Pillow installed"
@@ -113,63 +100,14 @@ hr
 # ── 5. Make scripts executable ─────────────────────────────────
 
 info "Setting file permissions..."
-
 chmod +x "$APP_DIR/Launch.command"
 chmod +x "$APP_DIR/build_app.sh"
 chmod +x "$APP_DIR/update-image-counts.sh"
 chmod +x "$APP_DIR/new-event.sh"
 chmod +x "$APP_DIR/organise-existing-event.sh"
-
 ok "Scripts are executable"
 
 hr
-
-# ── 6. Build .app (optional) ───────────────────────────────────
-
-if $BUILD_APP; then
-  info "Building Filematic.app..."
-  echo ""
-
-  # PyInstaller needed for build only
-  python3 -m pip install --quiet "pyinstaller>=6.0"
-
-  # Detect architecture and pass appropriate flag
-  NATIVE=$(uname -m)
-  if [[ "$NATIVE" == "arm64" ]]; then
-    BUILD_ARCH="--universal"
-    info "Apple Silicon — building universal binary (runs on Intel + Apple Silicon)"
-  else
-    BUILD_ARCH="--intel"
-    info "Intel Mac — building x86_64 binary"
-  fi
-
-  cd "$APP_DIR"
-  bash build_app.sh $BUILD_ARCH
-
-  if [[ -d "$SCRIPT_DIR/Filematic.app" ]]; then
-    ok "Filematic.app built successfully"
-    echo ""
-    echo "  ─────────────────────────────────────────"
-    echo ""
-    echo "  You can now double-click to launch:"
-    echo "  Filematic.app"
-    echo ""
-  else
-    echo ""
-    echo "  ⚠️  App bundle not found after build."
-    echo "     Try running manually: cd app && bash build_app.sh"
-    echo "     Or launch without building: double-click app/Launch.command"
-    echo ""
-  fi
-else
-  echo ""
-  echo "  Skipped app build (--no-build)"
-  echo ""
-  echo "  To launch without the .app bundle:"
-  echo "  → Double-click app/Launch.command"
-  echo "  → Or: cd app && python3 main.py"
-  echo ""
-fi
 
 # ── Done ───────────────────────────────────────────────────────
 
@@ -177,7 +115,10 @@ echo "  ════════════════════════
 echo "    Setup complete."
 echo "  ═══════════════════════════════════════════"
 echo ""
+echo "  To launch:"
+echo "    cd app && python3 main.py"
+echo ""
 echo "  Your settings are stored at:"
-echo "  ~/Library/Application Support/Filematic/settings.json"
-echo "  (created on first launch — not committed to the repo)"
+echo "    ~/.config/Filematic/settings.json"
+echo "  (created on first launch)"
 echo ""

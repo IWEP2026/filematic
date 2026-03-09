@@ -15,9 +15,15 @@ dist/
 .build/
 *.spec
 
-# Built app bundles
+# Built app bundles and PyInstaller output dirs
 *.app/
-"File Sorting App"/
+File Sorting App/
+File\ Sorting\ App/
+Filematic/
+Filematic-Intel/
+
+# Test data
+test/
 
 # Editor / IDE
 .vscode/

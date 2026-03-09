@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-File Sorting App — Personal & Professional Workflow for Creatives
+Filematic — Personal & Professional Workflow for Creatives
 Step-by-step launcher with folder browser.
 
 Requirements:
@@ -13,12 +13,18 @@ import sys
 import json
 import queue
 import shlex
+import shutil
+import platform
 import subprocess
 import threading
 from datetime import datetime, date, timedelta
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
+
+# ─── Platform ─────────────────────────────────────────────────────────────────
+
+PLATFORM = platform.system()   # 'Darwin', 'Linux', 'Windows'
 
 try:
     from PIL import Image, ImageTk
@@ -28,8 +34,26 @@ except ImportError:
 
 # ─── Settings ────────────────────────────────────────────────────────────────
 
-SETTINGS_PATH  = Path.home() / "Library" / "Application Support" / "FileSortingApp" / "settings.json"
-DEFAULT_VOLUME = "/Volumes/Photography"
+def _settings_path():
+    if PLATFORM == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "Filematic" / "settings.json"
+    elif PLATFORM == "Windows":
+        base = os.environ.get("APPDATA") or str(Path.home())
+        return Path(base) / "Filematic" / "settings.json"
+    else:  # Linux / BSD
+        base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+        return Path(base) / "Filematic" / "settings.json"
+
+def _default_volume():
+    if PLATFORM == "Darwin":
+        return "/Volumes/Photography"
+    elif PLATFORM == "Windows":
+        return "D:\\Photography"
+    else:
+        return str(Path.home() / "Photography")
+
+SETTINGS_PATH  = _settings_path()
+DEFAULT_VOLUME = _default_volume()
 
 def load_settings():
     try:
@@ -37,10 +61,22 @@ def load_settings():
             s = json.loads(SETTINGS_PATH.read_text())
             s.setdefault("backup_dest", "")
             s.setdefault("jpg_dest", "")
+            s.setdefault("personal_root", "Personal")
+            s.setdefault("events_root", "Events")
+            s.setdefault("client_label", "Client Name")
+            s.setdefault("project_types", DEFAULT_PROJECT_TYPES)
             return s
     except Exception:
         pass
-    return {"volume": DEFAULT_VOLUME, "backup_dest": "", "jpg_dest": ""}
+    return {
+        "volume": DEFAULT_VOLUME,
+        "backup_dest": "",
+        "jpg_dest": "",
+        "personal_root": "Personal",
+        "events_root": "Events",
+        "client_label": "Client Name",
+        "project_types": DEFAULT_PROJECT_TYPES,
+    }
 
 def save_settings(s):
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -55,26 +91,38 @@ def get_script_dir():
 
 # ─── Colours ─────────────────────────────────────────────────────────────────
 
-BG         = "#ffffff"
-PANEL      = "#f5f5f7"
-STEP_BG    = "#ebebed"
-BORDER     = "#a0a0a8"
+BG         = "#fafafa"   # single background throughout
+PANEL      = "#fafafa"   # same — no alternating shading
+STEP_BG    = "#fafafa"   # same
+BORDER     = "#e0e0e2"   # clean, light separator
 ACCENT     = "#0071e3"
-ACCENT_HOV = "#0077ed"
+ACCENT_HOV = "#0060c7"
 TEXT       = "#1d1d1f"
 GREY       = "#6e6e73"
-DIM        = "#8e8e93"
+DIM        = "#9a9a9f"
 GREEN      = "#1a8c3a"
 RED        = "#d93025"
-YELLOW     = "#c07800"
+YELLOW     = "#b06a00"
 INPUT_BG   = "#ffffff"
-INPUT_BD   = "#8e8e93"
-BTN_INACT  = "#b8b8c0"
-BTN_PRESS  = "#9898a4"
+INPUT_BD   = "#d0d0d5"
+BTN_INACT  = "#e8e8ec"   # clean light grey for inactive buttons
+BTN_PRESS  = "#d8d8de"
+
+# ─── Fonts ───────────────────────────────────────────────────────────────────
+
+if PLATFORM == "Darwin":
+    F_UI   = "SF Pro Display"
+    F_MONO = "SF Pro Mono"
+elif PLATFORM == "Windows":
+    F_UI   = "Segoe UI"
+    F_MONO = "Consolas"
+else:  # Linux / BSD
+    F_UI   = "Helvetica"
+    F_MONO = "Courier"
 
 # ─── New Event data ───────────────────────────────────────────────────────────
 
-SHOOT_TYPES = [
+DEFAULT_PROJECT_TYPES = [
     "Wedding",
     "Corporate",
     "Model",
@@ -121,11 +169,12 @@ SESSION_INFO_TEMPLATE = """\
 STEP_HINTS = {
     "personal": (
         "Select your camera card or source folder (e.g. DCIM) in the panel below, then click Run. "
-        "Reads the capture/creation date from every file and sorts into Personal/YYYY/Week WW · Mon DD–DD/. "
-        "If you shoot with multiple cameras in the same session — e.g. a Fujifilm (RAF) and a Nikon (NEF) — "
-        "all files land in the same folder, ordered by the exact moment each was captured. "
-        "Format doesn't matter: RAW, JPG, video, audio, design files and motion projects are all supported "
-        "and always merged by date, never separated by camera or file type. "
+        "Reads the capture/creation date from every file and sorts into your Personal folder. "
+        "Photos (RAW + JPG) land in Personal/YYYY/Week WW · Mon DD–DD/. "
+        "Video, audio, design and motion files each get their own subfolder "
+        "(Personal/Video/, Personal/Audio/, Personal/Design/, Personal/Motion/) "
+        "so different file types are never mixed. "
+        "Multi-camera sessions are merged by exact capture time regardless of format or camera. "
         "Requires exiftool (brew install exiftool)."
     ),
     "new_event": (
@@ -148,10 +197,19 @@ STEP_HINTS = {
         "on the backup. Terminal opens so you can monitor progress."
     ),
     "split_jpgs": (
-        "Select any folder (event session, personal week, etc.) in the panel below, then click Run. "
-        "All JPG/JPEG files found inside are moved to the JPGs folder on your Photography Volume "
-        "(Photography/JPGs/[folder-name]/), keeping them separate from your RAWs and event archives. "
+        "Select an event session folder in the panel below, then click Run. "
+        "JPG/JPEG files inside Unedited RAWs/ are moved to the JPGs folder on your Photography Volume "
+        "(Photography/JPGs/[folder-name]/), keeping them separate from your RAWs. "
+        "Files inside Best Images/ are never touched. "
         "Runs silently — no Terminal window."
+    ),
+    "rename_edited": (
+        "Select a folder of edited or exported images in the panel below, then click Run. "
+        "Every file is renamed in-place using its EXIF capture date — "
+        "no files are moved, no subfolders are created. "
+        "Files already using the correct date-based name are skipped. "
+        "Files inside any Best Images/ subfolder are always left untouched. "
+        "Requires exiftool (brew install exiftool)."
     ),
 }
 
@@ -320,7 +378,7 @@ class FolderTree(tk.Frame):
         style.configure("PH.Treeview",
             background=PANEL, foreground=TEXT,
             fieldbackground=PANEL, rowheight=28,
-            font=("SF Pro Display", 12), borderwidth=0,
+            font=(F_UI, 12), borderwidth=0,
         )
         style.map("PH.Treeview",
             background=[("selected", "#dce8fb")],
@@ -329,7 +387,7 @@ class FolderTree(tk.Frame):
 
     def _build(self):
         tk.Label(self, text="FOLDERS", bg=PANEL, fg=DIM,
-                 font=("SF Pro Display", 9), anchor="w", padx=14, pady=8
+                 font=(F_UI, 9), anchor="w", padx=14, pady=8
                  ).pack(fill="x")
 
         frame = tk.Frame(self, bg=PANEL)
@@ -342,7 +400,7 @@ class FolderTree(tk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
-        self.tree.tag_configure("sep", foreground=DIM, font=("SF Pro Display", 9))
+        self.tree.tag_configure("sep", foreground=DIM, font=(F_UI, 9))
         self._populate()
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
         self.tree.bind("<<TreeviewOpen>>",   self._on_open)
@@ -355,17 +413,45 @@ class FolderTree(tk.Frame):
                 self._paths[iid] = str(p)
                 self._maybe_add_dummy(iid, p)
 
-        self.tree.insert("", "end", text="  ── Volumes", tags=("sep",))
-        vols = Path("/Volumes")
-        if vols.exists():
-            try:
-                for v in sorted(vols.iterdir(), key=lambda p: p.name.lower()):
-                    if v.is_dir() and not v.name.startswith('.'):
-                        iid = self.tree.insert("", "end", text=f"  💿  {v.name}")
-                        self._paths[iid] = str(v)
-                        self._maybe_add_dummy(iid, v)
-            except PermissionError:
-                pass
+        if PLATFORM == "Darwin":
+            self.tree.insert("", "end", text="  ── Volumes", tags=("sep",))
+            vols = Path("/Volumes")
+            if vols.exists():
+                try:
+                    for v in sorted(vols.iterdir(), key=lambda p: p.name.lower()):
+                        if v.is_dir() and not v.name.startswith('.'):
+                            iid = self.tree.insert("", "end", text=f"  💿  {v.name}")
+                            self._paths[iid] = str(v)
+                            self._maybe_add_dummy(iid, v)
+                except PermissionError:
+                    pass
+
+        elif PLATFORM == "Linux":
+            self.tree.insert("", "end", text="  ── Volumes", tags=("sep",))
+            for mount_root in [Path("/media"), Path("/mnt")]:
+                if not mount_root.exists():
+                    continue
+                try:
+                    for v in sorted(mount_root.iterdir(), key=lambda p: p.name.lower()):
+                        if v.is_dir() and not v.name.startswith('.'):
+                            iid = self.tree.insert("", "end", text=f"  💿  {v.name}")
+                            self._paths[iid] = str(v)
+                            self._maybe_add_dummy(iid, v)
+                except PermissionError:
+                    pass
+
+        elif PLATFORM == "Windows":
+            import string
+            self.tree.insert("", "end", text="  ── Drives", tags=("sep",))
+            for letter in string.ascii_uppercase:
+                drive = Path(f"{letter}:\\")
+                try:
+                    if drive.exists():
+                        iid = self.tree.insert("", "end", text=f"  💿  {letter}:")
+                        self._paths[iid] = str(drive)
+                        self._maybe_add_dummy(iid, drive)
+                except (PermissionError, OSError):
+                    pass
 
     def _maybe_add_dummy(self, iid, path):
         try:
@@ -439,6 +525,8 @@ class ThumbnailGrid(tk.Frame):
         self._q                = queue.Queue()
         self._resize_id        = None
         self._on_load_complete = on_load_complete
+        self._selected_path    = None
+        self._cell_frames      = {}   # path → cell Frame
         self._build()
 
     def _build(self):
@@ -450,14 +538,14 @@ class ThumbnailGrid(tk.Frame):
         self._breadcrumb = tk.Label(
             self._header, text="No folder selected",
             bg=STEP_BG, fg=DIM,
-            font=("SF Pro Mono", 11), anchor="w", padx=12, pady=6
+            font=(F_MONO, 11), anchor="w", padx=12, pady=6
         )
         self._breadcrumb.pack(side="left", fill="x", expand=True)
 
         self._count_lbl = tk.Label(
             self._header, text="",
             bg=STEP_BG, fg=DIM,
-            font=("SF Pro Display", 11), anchor="e", padx=12
+            font=(F_UI, 11), anchor="e", padx=12
         )
         self._count_lbl.pack(side="right")
 
@@ -480,7 +568,7 @@ class ThumbnailGrid(tk.Frame):
             w.bind("<Button-5>",   self._scroll)
 
         self._hint = tk.Label(self.canvas, text="Select a folder",
-                               fg=DIM, bg=BG, font=("SF Pro Display", 14))
+                               fg=DIM, bg=BG, font=(F_UI, 14))
         self._hint.place(relx=0.5, rely=0.5, anchor="center")
 
     def _on_canvas_resize(self, event):
@@ -567,39 +655,109 @@ class ThumbnailGrid(tk.Frame):
     def _add_cell_widget(self, row, col, kind, path, extra):
         cell = tk.Frame(self.inner, bg=BG)
         cell.grid(row=row, column=col, padx=THUMB_GAP, pady=THUMB_GAP, sticky="n")
+        self._cell_frames[path] = cell
 
         if kind == "dir":
-            tk.Label(cell, text="📂", bg=BG, font=("SF Pro Display", 40)).pack()
+            tk.Label(cell, text="📂", bg=BG, font=(F_UI, 40)).pack()
         elif kind == "img":
             if extra:  # extra = PhotoImage
                 tk.Label(cell, image=extra, bg=BG, bd=0, highlightthickness=0).pack()
             else:
-                tk.Label(cell, text="📷", bg=BG, font=("SF Pro Display", 36)).pack()
+                tk.Label(cell, text="📷", bg=BG, font=(F_UI, 36)).pack()
         else:
             icon = FILE_ICONS.get(path.suffix.lower(), "📄")
-            tk.Label(cell, text=icon, bg=BG, font=("SF Pro Display", 36)).pack()
+            tk.Label(cell, text=icon, bg=BG, font=(F_UI, 36)).pack()
             tk.Label(cell, text=path.suffix.upper().lstrip(".") or "FILE",
-                     bg=BG, fg=DIM, font=("SF Pro Display", 9)).pack()
+                     bg=BG, fg=DIM, font=(F_UI, 9)).pack()
 
         name = path.name
         if len(name) > 20:
             name = name[:17] + "…"
         tk.Label(cell, text=name, bg=BG, fg=GREY,
-                 font=("SF Pro Display", 10), wraplength=THUMB_W).pack(pady=(2, 0))
+                 font=(F_UI, 10), wraplength=THUMB_W).pack(pady=(2, 0))
 
         # Show relative modified time for directories
         if kind == "dir" and extra is not None:
             tk.Label(cell, text=relative_time(extra),
-                     bg=BG, fg=DIM, font=("SF Pro Display", 9)).pack()
+                     bg=BG, fg=DIM, font=(F_UI, 9)).pack()
+
+        # Bindings: left-click to select, right-click for context menu,
+        # double-click images to preview
+        right_btn = "<Button-2>" if PLATFORM == "Darwin" else "<Button-3>"
+        for w in [cell] + cell.winfo_children():
+            w.bind("<Button-1>",  lambda e, p=path, c=cell: self._select_cell(p, c))
+            w.bind(right_btn,     lambda e, p=path: self._show_context_menu(e, p))
+            if kind == "img":
+                w.bind("<Double-Button-1>", lambda e, p=path: self._preview_image(p))
 
         self.inner.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _open_in_finder(self, path):
+        p = str(path)
+        if PLATFORM == "Darwin":
+            subprocess.Popen(["open", "-R", p])
+        elif PLATFORM == "Windows":
+            subprocess.Popen(["explorer", "/select,", p])
+        else:
+            subprocess.Popen(["xdg-open", str(Path(p).parent)])
+
+    def _show_context_menu(self, event, path):
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Open in Finder", command=lambda: self._open_in_finder(path))
+        if path.is_file() and path.suffix.lower() in {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif', '.webp', '.bmp', '.gif'}:
+            menu.add_command(label="Preview", command=lambda: self._preview_image(path))
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _preview_image(self, path):
+        if not HAS_PIL:
+            return
+        try:
+            img = Image.open(path)
+            # Scale to fit screen (max 1200×900)
+            img.thumbnail((1200, 900), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            win = tk.Toplevel(self)
+            win.title(path.name)
+            win.configure(bg=BG)
+            win.resizable(True, True)
+            lbl = tk.Label(win, image=photo, bg=BG)
+            lbl.pack(padx=12, pady=12)
+            lbl.image = photo  # keep reference
+            # Close on click or Escape
+            win.bind("<Escape>", lambda e: win.destroy())
+            lbl.bind("<Button-1>", lambda e: win.destroy())
+        except Exception:
+            pass
+
+    def _select_cell(self, path, cell):
+        # Deselect previous
+        prev = self._cell_frames.get(self._selected_path)
+        if prev and prev.winfo_exists():
+            for w in [prev] + prev.winfo_children():
+                try:
+                    w.configure(bg=BG)
+                except Exception:
+                    pass
+        self._selected_path = path
+        # Highlight new selection
+        sel_bg = "#e8f0fe"
+        for w in [cell] + cell.winfo_children():
+            try:
+                w.configure(bg=sel_bg)
+            except Exception:
+                pass
 
     def _clear(self):
         for w in self.inner.winfo_children():
             w.destroy()
         self._refs.clear()
         self._items.clear()
+        self._cell_frames.clear()
+        self._selected_path = None
 
 # ─── App ─────────────────────────────────────────────────────────────────────
 
@@ -611,6 +769,7 @@ class App(tk.Tk):
         ("Organise Event", "organise"),
         ("Update Counts",  "counts"),
         ("Split JPGs",     "split_jpgs"),
+        ("Rename Edited",  "rename_edited"),
         ("Backup Drive",   "backup"),
     ]
 
@@ -636,7 +795,7 @@ class App(tk.Tk):
         return raw.replace(str(Path.home()), "~")
 
     def _setup_window(self):
-        self.title("File Sorting App")
+        self.title("Filematic")
         self.geometry("1040x760")
         self.resizable(True, True)
         self.minsize(800, 600)
@@ -659,15 +818,14 @@ class App(tk.Tk):
         hdr.pack_propagate(False)
         tk.Frame(hdr, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
-        tk.Label(hdr, text="File Sorting App",
-                 bg=BG, fg=TEXT, font=("SF Pro Display", 17, "bold"),
+        tk.Label(hdr, text="Filematic",
+                 bg=BG, fg=TEXT, font=(F_UI, 17, "bold"),
                  padx=20).pack(side="left", pady=14)
         tk.Label(hdr, text="Personal & Professional Workflow for Creatives",
-                 bg=BG, fg=DIM, font=("SF Pro Display", 12)).pack(side="left", pady=14)
-        tk.Button(hdr, text="⚙ Settings",
-                  bg=BG, fg=GREY, font=("SF Pro Display", 12),
-                  bd=0, relief="flat", cursor="hand2",
-                  activebackground=PANEL, activeforeground=TEXT,
+                 bg=BG, fg=DIM, font=(F_UI, 12)).pack(side="left", pady=14)
+        tk.Button(hdr, text="Settings",
+                  bg=BG, fg=GREY, font=(F_UI, 12),
+                  bd=0, relief="flat",                   activebackground=PANEL, activeforeground=TEXT,
                   padx=16, command=self._open_settings).pack(side="right", pady=8)
 
     def _build_step1_drive(self):
@@ -679,35 +837,35 @@ class App(tk.Tk):
         inner.pack(fill="x", padx=20, pady=8)
 
         tk.Label(inner, text="1", bg=ACCENT, fg="#ffffff",
-                 font=("SF Pro Display", 11, "bold"),
+                 font=(F_UI, 11, "bold"),
                  width=2, anchor="center").pack(side="left")
         tk.Label(inner, text="Photography Volume",
                  bg=STEP_BG, fg=TEXT,
-                 font=("SF Pro Display", 12, "bold"), padx=10).pack(side="left")
+                 font=(F_UI, 12, "bold"), padx=10).pack(side="left")
 
         self._vol_lbl = tk.Label(inner, text=self.settings["volume"],
-                                  bg=STEP_BG, fg=GREY, font=("SF Pro Mono", 12))
+                                  bg=STEP_BG, fg=GREY, font=(F_MONO, 12))
         self._vol_lbl.pack(side="left")
 
         tk.Label(inner, text="  |  Backup →",
-                 bg=STEP_BG, fg=DIM, font=("SF Pro Display", 11)).pack(side="left")
+                 bg=STEP_BG, fg=DIM, font=(F_UI, 11)).pack(side="left")
 
         self._backup_lbl = tk.Label(
             inner,
             text=self.settings.get("backup_dest") or "not set",
             bg=STEP_BG,
             fg=GREY if self.settings.get("backup_dest") else RED,
-            font=("SF Pro Mono", 12),
+            font=(F_MONO, 12),
         )
         self._backup_lbl.pack(side="left")
 
         tk.Label(inner, text="  |  JPGs →",
-                 bg=STEP_BG, fg=DIM, font=("SF Pro Display", 11)).pack(side="left")
+                 bg=STEP_BG, fg=DIM, font=(F_UI, 11)).pack(side="left")
 
         jpg_default = self._jpg_dest_display()
         self._jpg_lbl = tk.Label(
             inner, text=jpg_default,
-            bg=STEP_BG, fg=GREY, font=("SF Pro Mono", 12),
+            bg=STEP_BG, fg=GREY, font=(F_MONO, 12),
         )
         self._jpg_lbl.pack(side="left")
 
@@ -720,27 +878,30 @@ class App(tk.Tk):
         inner.pack(fill="x", padx=20, pady=8)
 
         tk.Label(inner, text="2", bg=ACCENT, fg="#ffffff",
-                 font=("SF Pro Display", 11, "bold"),
+                 font=(F_UI, 11, "bold"),
                  width=2, anchor="center").pack(side="left")
         tk.Label(inner, text="What to do",
                  bg=PANEL, fg=TEXT,
-                 font=("SF Pro Display", 12, "bold"), padx=10).pack(side="left")
+                 font=(F_UI, 12, "bold"), padx=10).pack(side="left")
 
         for label, val in self.OPERATIONS:
             active = val == self._op
-            b = tk.Button(
-                inner, text=label,
-                bg=ACCENT if active else BTN_INACT,
+            # Use Frame+Label instead of Button to avoid macOS Aqua highlight flash
+            border = tk.Frame(inner,
+                bg=ACCENT if active else BORDER,
+                padx=1, pady=1)
+            border.pack(side="left", padx=(0, 6))
+            lbl = tk.Label(border, text=label,
+                bg=ACCENT if active else "#ffffff",
                 fg="#ffffff" if active else TEXT,
-                font=("SF Pro Display", 12),
-                bd=0, relief="flat", cursor="hand2",
-                padx=14, pady=6,
-                activebackground=ACCENT_HOV if active else BTN_PRESS,
-                activeforeground="#ffffff",
-                command=lambda v=val: self._select_op(v)
-            )
-            b.pack(side="left", padx=(0, 6))
-            self._op_btns[val] = b
+                font=(F_UI, 12),
+                padx=13, pady=5)
+            lbl.pack()
+            for widget in (border, lbl):
+                widget.bind("<Button-1>", lambda e, v=val: self._select_op(v))
+                widget.bind("<Enter>",    lambda e, b=border, l=lbl, v=val: self._op_hover(b, l, v, True))
+                widget.bind("<Leave>",    lambda e, b=border, l=lbl, v=val: self._op_hover(b, l, v, False))
+            self._op_btns[val] = (border, lbl)
 
     def _build_step3_hint(self):
         self._step3_row = tk.Frame(self, bg=STEP_BG)
@@ -751,16 +912,16 @@ class App(tk.Tk):
         inner.pack(fill="x", padx=20, pady=8)
 
         tk.Label(inner, text="3", bg=ACCENT, fg="#ffffff",
-                 font=("SF Pro Display", 11, "bold"),
+                 font=(F_UI, 11, "bold"),
                  width=2, anchor="center").pack(side="left")
         tk.Label(inner, text="Select folder",
                  bg=STEP_BG, fg=TEXT,
-                 font=("SF Pro Display", 12, "bold"), padx=10).pack(side="left")
+                 font=(F_UI, 12, "bold"), padx=10).pack(side="left")
 
         self._step3_hint = tk.Label(
             inner, text=STEP_HINTS[self._op],
             bg=STEP_BG, fg=GREY,
-            font=("SF Pro Display", 11),
+            font=(F_UI, 11),
             justify="left", wraplength=720,
         )
         self._step3_hint.pack(side="left")
@@ -780,12 +941,12 @@ class App(tk.Tk):
 
         def lbl(text, r, c):
             tk.Label(body, text=text, bg=PANEL, fg=GREY,
-                     font=("SF Pro Display", 11), anchor="w"
+                     font=(F_UI, 11), anchor="w"
                      ).grid(row=r, column=c, sticky="w", padx=(0, 8), pady=5)
 
         def entry(var, r, c, width=None, **kw):
             e = tk.Entry(body, textvariable=var,
-                         font=("SF Pro Mono", 12), bg=INPUT_BG, fg=TEXT,
+                         font=(F_MONO, 12), bg=INPUT_BG, fg=TEXT,
                          relief="flat", bd=0, insertbackground=TEXT,
                          highlightthickness=2, highlightbackground=INPUT_BD,
                          highlightcolor=ACCENT, **kw)
@@ -801,37 +962,56 @@ class App(tk.Tk):
         self._ev_date = tk.StringVar(value=str(date.today()))
         lbl("Shoot Date", 0, 2);  entry(self._ev_date, 0, 2)
 
-        # Row 1: Shoot Type  |  Client/Couple Name
-        lbl("Shoot Type", 1, 0)
-        self._ev_type = tk.StringVar(value=SHOOT_TYPES[0])
-        type_cb = ttk.Combobox(body, textvariable=self._ev_type,
-                                values=SHOOT_TYPES, state="readonly",
-                                font=("SF Pro Display", 12))
-        type_cb.grid(row=1, column=1, sticky="ew", padx=(0, 24), pady=5, ipady=4)
-        type_cb.bind("<<ComboboxSelected>>", lambda e: self._update_client_label())
+        # Row 1: Project Type  |  Client Name
+        lbl("Project Type", 1, 0)
+        project_types = self.settings.get("project_types", DEFAULT_PROJECT_TYPES)
+        self._ev_type = tk.StringVar(value=project_types[0] if project_types else "")
+        self._ev_type_cb = ttk.Combobox(body, textvariable=self._ev_type,
+                                         values=project_types, state="readonly",
+                                         font=(F_UI, 12))
+        self._ev_type_cb.grid(row=1, column=1, sticky="ew", padx=(0, 24), pady=5, ipady=4)
+        self._ev_type_cb.bind("<<ComboboxSelected>>", lambda e: self._on_type_changed())
 
-        self._ev_client_lbl = tk.Label(body, text="Couple Name",
+        client_label = self.settings.get("client_label", "Client Name")
+        self._ev_client_lbl = tk.Label(body, text=client_label,
                                         bg=PANEL, fg=GREY,
-                                        font=("SF Pro Display", 11), anchor="w")
+                                        font=(F_UI, 11), anchor="w")
         self._ev_client_lbl.grid(row=1, column=2, sticky="w", padx=(0, 8), pady=5)
         self._ev_client = tk.StringVar()
         tk.Entry(body, textvariable=self._ev_client,
-                 font=("SF Pro Mono", 12), bg=INPUT_BG, fg=TEXT,
+                 font=(F_MONO, 12), bg=INPUT_BG, fg=TEXT,
                  relief="flat", bd=0, insertbackground=TEXT,
                  highlightthickness=2, highlightbackground=INPUT_BD,
                  highlightcolor=ACCENT
                  ).grid(row=1, column=3, sticky="ew", padx=(0, 24), pady=5, ipady=6)
 
+        # Row 2: Wedding-only — prenuptials toggle
+        self._ev_prenup = tk.BooleanVar(value=True)
+        self._prenup_row = tk.Frame(body, bg=PANEL)
+        self._prenup_row.grid(row=2, column=0, columnspan=4, sticky="w", pady=(2, 4))
+        tk.Checkbutton(
+            self._prenup_row, text="Include prenuptials sessions",
+            variable=self._ev_prenup,
+            bg=PANEL, fg=GREY, font=(F_UI, 11),
+            activebackground=PANEL, selectcolor=INPUT_BG,
+        ).pack(side="left")
+        # Show only when Wedding is selected
+        self._update_prenup_visibility()
+
         # Hint
         tk.Label(body,
                  text="Name: use hyphens, no spaces — e.g.  Smith-Jones  or  Acme-Corp",
-                 bg=PANEL, fg=DIM, font=("SF Pro Display", 10)
-                 ).grid(row=2, column=2, columnspan=2, sticky="w")
+                 bg=PANEL, fg=DIM, font=(F_UI, 10)
+                 ).grid(row=3, column=2, columnspan=2, sticky="w")
 
-    def _update_client_label(self):
-        self._ev_client_lbl.configure(
-            text="Couple Name" if self._ev_type.get() == "Wedding" else "Client Name"
-        )
+    def _on_type_changed(self):
+        self._update_prenup_visibility()
+
+    def _update_prenup_visibility(self):
+        if self._ev_type.get() == "Wedding":
+            self._prenup_row.grid()
+        else:
+            self._prenup_row.grid_remove()
 
     def _build_folder_panel(self):
         self._folder_paned = tk.PanedWindow(
@@ -860,13 +1040,13 @@ class App(tk.Tk):
         inner.pack(fill="x", padx=20, pady=10)
 
         tk.Label(inner, text="4", bg=ACCENT, fg="#ffffff",
-                 font=("SF Pro Display", 11, "bold"),
+                 font=(F_UI, 11, "bold"),
                  width=2, anchor="center").pack(side="left")
 
         self._status_lbl = tk.Label(
             inner, text="Select a folder to begin",
             bg=PANEL, fg=DIM,
-            font=("SF Pro Display", 11),
+            font=(F_UI, 11),
             anchor="w", padx=12
         )
         self._status_lbl.pack(side="left", fill="x", expand=True)
@@ -874,9 +1054,8 @@ class App(tk.Tk):
         self._run_btn = tk.Button(
             inner, text="Run",
             bg=ACCENT, fg="#ffffff",
-            font=("SF Pro Display", 14, "bold"),
-            bd=0, relief="flat", cursor="hand2",
-            padx=28, pady=8,
+            font=(F_UI, 14, "bold"),
+            bd=0, relief="flat",             padx=28, pady=8,
             activebackground=ACCENT_HOV, activeforeground="#ffffff",
             command=self._run
         )
@@ -900,15 +1079,21 @@ class App(tk.Tk):
                f"{shlex.quote(self.dropped_path)}")
         threading.Thread(target=self._bg_counts, args=(cmd,), daemon=True).start()
 
+    def _op_hover(self, border, lbl, val, entering):
+        active = val == self._op
+        if active:
+            return  # don't change active button on hover
+        border.configure(bg=ACCENT if entering else BORDER)
+        lbl.configure(bg=BTN_PRESS if entering else "#ffffff")
+
     def _select_op(self, val):
         self._op = val
-        for k, b in self._op_btns.items():
+        for k, (border, lbl) in self._op_btns.items():
             active = k == val
-            b.configure(
-                bg=ACCENT if active else BTN_INACT,
+            border.configure(bg=ACCENT if active else BORDER)
+            lbl.configure(
+                bg=ACCENT if active else "#ffffff",
                 fg="#ffffff" if active else TEXT,
-                activebackground=ACCENT_HOV if active else BTN_PRESS,
-                activeforeground="#ffffff",
             )
         self._step3_hint.configure(text=STEP_HINTS[val])
 
@@ -938,10 +1123,11 @@ class App(tk.Tk):
         if op == "personal":
             if not self.dropped_path:
                 self._set_status("Choose a card folder first (step 3)", RED); return
+            personal_root = self.settings.get("personal_root", "Personal")
             cmd = (
-                f"python3 {shlex.quote(script('sort-photos.py'))} --ingest "
+                f"{shlex.quote(sys.executable)} {shlex.quote(script('sort-photos.py'))} --ingest "
                 f"{shlex.quote(self.dropped_path)} "
-                f"{shlex.quote(os.path.join(vol, 'Personal'))}"
+                f"{shlex.quote(os.path.join(vol, personal_root))}"
             )
             self._to_terminal(cmd)
 
@@ -951,14 +1137,20 @@ class App(tk.Tk):
         elif op == "organise":
             if not self.dropped_path:
                 self._set_status("Choose an event folder first (step 3)", RED); return
-            cmd = (f"bash {shlex.quote(script('organise-existing-event.sh'))} "
+            bash = self._find_bash()
+            if not bash:
+                self._set_status("bash not found — install WSL or Git for Windows", RED); return
+            cmd = (f"{shlex.quote(bash)} {shlex.quote(script('organise-existing-event.sh'))} "
                    f"{shlex.quote(self.dropped_path)}")
             self._to_terminal(cmd)
 
         elif op == "counts":
             if not self.dropped_path:
                 self._set_status("Choose a session folder first (step 3)", RED); return
-            cmd = (f"bash {shlex.quote(script('update-image-counts.sh'))} "
+            bash = self._find_bash()
+            if not bash:
+                self._set_status("bash not found — install WSL or Git for Windows", RED); return
+            cmd = (f"{shlex.quote(bash)} {shlex.quote(script('update-image-counts.sh'))} "
                    f"{shlex.quote(self.dropped_path)}")
             threading.Thread(target=self._bg_counts, args=(cmd,), daemon=True).start()
 
@@ -971,13 +1163,25 @@ class App(tk.Tk):
                 daemon=True
             ).start()
 
+        elif op == "rename_edited":
+            if not self.dropped_path:
+                self._set_status("Choose a folder first (step 3)", RED); return
+            cmd = (
+                f"{shlex.quote(sys.executable)} {shlex.quote(script('sort-photos.py'))} --rename-only "
+                f"{shlex.quote(self.dropped_path)}"
+            )
+            self._to_terminal(cmd)
+
         elif op == "backup":
             dest = self.settings.get("backup_dest", "").strip()
             if not dest:
                 self._set_status("Set a Backup Destination in Settings first", RED); return
             Path(dest).mkdir(parents=True, exist_ok=True)
-            src = vol.rstrip("/") + "/"
-            cmd = f"rsync -av --progress {shlex.quote(src)} {shlex.quote(dest)}"
+            if PLATFORM == "Windows":
+                cmd = f'robocopy "{vol}" "{dest}" /MIR /MT:4 /NP'
+            else:
+                src = vol.rstrip("/") + "/"
+                cmd = f"rsync -av --progress {shlex.quote(src)} {shlex.quote(dest)}"
             self._to_terminal(cmd)
 
     # ── New Event (in-app) ────────────────────────────────────────────────────
@@ -991,7 +1195,8 @@ class App(tk.Tk):
         if not year.isdigit() or len(year) != 4:
             self._set_status("Year must be a 4-digit number", RED); return
         if not client_raw:
-            self._set_status("Enter a client or couple name", RED); return
+            label = self.settings.get("client_label", "Client Name")
+            self._set_status(f"Enter a {label.lower()}", RED); return
         try:
             datetime.strptime(shoot_date, "%Y-%m-%d")
         except ValueError:
@@ -1003,22 +1208,32 @@ class App(tk.Tk):
             self._set_status("Client name contains no valid characters", RED); return
         client_upper = client.upper()
 
-        events_root = Path(vol) / "Events"
+        events_folder_name = self.settings.get("events_root", "Events")
+        events_root = Path(vol) / events_folder_name
         if not events_root.exists():
             self._set_status(
-                f"Events folder not found: {events_root}  (is your drive connected?)", RED)
+                f"{events_folder_name}/ folder not found: {events_root}  (is your drive connected?)", RED)
             return
 
         # Event folder includes the shoot date so it sorts chronologically in Finder
         event_folder = events_root / year / f"{shoot_date}_{client}_{shoot_type}"
 
         if shoot_type == "Wedding":
-            sessions = [
-                f"0001_{client_upper}_Prenuptials_{shoot_date}",
-                f"0002_{client_upper}_Bridesmaids_{shoot_date}",
-                f"0003_{client_upper}_Groomsmen_{shoot_date}",
-                f"0004_{client_upper}_Wedding_{shoot_date}",
-            ]
+            if self._ev_prenup.get():
+                sessions = [
+                    f"0001_{client_upper}_Prenuptials_{shoot_date}",
+                    f"0002_{client_upper}_Bridesmaids_{shoot_date}",
+                    f"0003_{client_upper}_Groomsmen_{shoot_date}",
+                    f"0004_{client_upper}_Ceremony_{shoot_date}",
+                    f"0005_{client_upper}_Reception_{shoot_date}",
+                ]
+            else:
+                sessions = [
+                    f"0001_{client_upper}_Bridesmaids_{shoot_date}",
+                    f"0002_{client_upper}_Groomsmen_{shoot_date}",
+                    f"0003_{client_upper}_Ceremony_{shoot_date}",
+                    f"0004_{client_upper}_Reception_{shoot_date}",
+                ]
         elif shoot_type == "Corporate":
             sessions = [
                 f"0001_{client_upper}_Corporate-Event_{shoot_date}",
@@ -1045,7 +1260,7 @@ class App(tk.Tk):
             self._set_status(f"Error creating folders: {e}", RED)
             return
 
-        short = f"Events/{year}/{shoot_date}_{client}_{shoot_type}/"
+        short = f"{events_folder_name}/{year}/{shoot_date}_{client}_{shoot_type}/"
         self._set_status(f"Created: {short}  ✓", GREEN)
 
         # Refresh grid if we're already viewing the year folder
@@ -1054,13 +1269,54 @@ class App(tk.Tk):
 
     # ── Terminal / background ─────────────────────────────────────────────────
 
+    @staticmethod
+    def _find_bash():
+        """Return path to bash, or None if not found."""
+        if PLATFORM == "Windows":
+            # Try WSL bash, then Git for Windows bash
+            candidates = [
+                r"C:\Windows\System32\bash.exe",
+                r"C:\Program Files\Git\bin\bash.exe",
+                r"C:\Program Files (x86)\Git\bin\bash.exe",
+            ]
+            for c in candidates:
+                if os.path.exists(c):
+                    return c
+            return shutil.which("bash")
+        return "bash"   # macOS and Linux always have bash
+
     def _to_terminal(self, cmd):
-        esc = cmd.replace("\\", "\\\\").replace('"', '\\"')
-        subprocess.run([
-            "osascript", "-e",
-            f'tell application "Terminal" to activate\n'
-            f'tell application "Terminal" to do script "{esc}"'
-        ])
+        if PLATFORM == "Darwin":
+            esc = cmd.replace("\\", "\\\\").replace('"', '\\"')
+            subprocess.run([
+                "osascript", "-e",
+                f'tell application "Terminal" to activate\n'
+                f'tell application "Terminal" to do script "{esc}"'
+            ])
+
+        elif PLATFORM == "Linux":
+            hold = f'{cmd}; echo; read -rp "Press Enter to close…"'
+            launched = False
+            for emulator, args in [
+                ("gnome-terminal", ["--", "bash", "-c", hold]),
+                ("konsole",        ["-e", "bash", "-c", hold]),
+                ("xfce4-terminal", ["-e", f'bash -c {shlex.quote(hold)}']),
+                ("xterm",          ["-e", f'bash -c {shlex.quote(hold)}']),
+                ("x-terminal-emulator", ["-e", f'bash -c {shlex.quote(hold)}']),
+            ]:
+                if shutil.which(emulator):
+                    subprocess.Popen([emulator] + args)
+                    launched = True
+                    break
+            if not launched:
+                # Headless fallback — run in background thread
+                threading.Thread(
+                    target=lambda: subprocess.run(cmd, shell=True), daemon=True
+                ).start()
+
+        elif PLATFORM == "Windows":
+            subprocess.Popen(["cmd.exe", "/c", "start", "cmd.exe", "/k", cmd])
+
         self._set_status("Running in Terminal…", GREEN)
 
     def _bg_counts(self, cmd):
@@ -1084,15 +1340,23 @@ class App(tk.Tk):
         self.after(0, lambda: self._set_status("Splitting JPGs…", YELLOW))
         self.after(0, lambda: self._run_btn.configure(state="disabled"))
         try:
-            src_path  = Path(source)
+            src_path    = Path(source)
             folder_name = src_path.name
-            dest_dir  = Path(jpg_root) / folder_name
+            dest_dir    = Path(jpg_root) / folder_name
             dest_dir.mkdir(parents=True, exist_ok=True)
+
+            # If the folder contains an "Unedited RAWs" subfolder, target only
+            # that subfolder — those are the camera JPGs that belong elsewhere.
+            # Otherwise scan the whole folder but never touch Best Images.
+            unedited = src_path / "Unedited RAWs"
+            search_root = unedited if unedited.is_dir() else src_path
 
             jpg_exts = {'.jpg', '.jpeg'}
             found = sorted(
-                [p for p in src_path.rglob('*')
-                 if p.is_file() and p.suffix.lower() in jpg_exts],
+                [p for p in search_root.rglob('*')
+                 if p.is_file()
+                 and p.suffix.lower() in jpg_exts
+                 and 'Best Images' not in p.parts],
                 key=lambda p: p.name.lower()
             )
 
@@ -1130,16 +1394,16 @@ class App(tk.Tk):
     def _open_settings(self):
         win = tk.Toplevel(self)
         win.title("Settings")
-        win.geometry("460x360")
+        win.geometry("460x640")
         win.resizable(False, False)
         win.configure(bg=BG)
         win.grab_set()
 
         def _field(label, default):
             tk.Label(win, text=label, bg=BG, fg=TEXT,
-                     font=("SF Pro Display", 12, "bold"), anchor="w"
+                     font=(F_UI, 12, "bold"), anchor="w"
                      ).pack(anchor="w", padx=24, pady=(16, 4))
-            e = tk.Entry(win, font=("SF Pro Mono", 12),
+            e = tk.Entry(win, font=(F_MONO, 12),
                          bg=INPUT_BG, fg=TEXT, relief="flat", bd=0,
                          insertbackground=TEXT, highlightthickness=2,
                          highlightbackground=INPUT_BD, highlightcolor=ACCENT)
@@ -1150,28 +1414,53 @@ class App(tk.Tk):
         vol_entry    = _field("Photography Volume",  self.settings["volume"])
         backup_entry = _field("Backup Destination",  self.settings.get("backup_dest", ""))
         tk.Label(win, text="e.g. /Volumes/BackupDrive/Photography",
-                 bg=BG, fg=DIM, font=("SF Pro Display", 10)
+                 bg=BG, fg=DIM, font=(F_UI, 10)
                  ).pack(anchor="w", padx=24, pady=(2, 0))
         jpg_entry = _field("JPG Split Destination",  self.settings.get("jpg_dest", ""))
         tk.Label(win, text="Leave blank to use Photography/JPGs/  (default)",
-                 bg=BG, fg=DIM, font=("SF Pro Display", 10)
+                 bg=BG, fg=DIM, font=(F_UI, 10)
+                 ).pack(anchor="w", padx=24, pady=(2, 0))
+        personal_entry = _field("Personal Folder Name",  self.settings.get("personal_root", "Personal"))
+        events_entry   = _field("Events Folder Name",    self.settings.get("events_root", "Events"))
+        tk.Label(win, text="Folder names inside your Photography Volume",
+                 bg=BG, fg=DIM, font=(F_UI, 10)
+                 ).pack(anchor="w", padx=24, pady=(2, 0))
+        client_entry = _field("Client Label",  self.settings.get("client_label", "Client Name"))
+        tk.Label(win, text="Label shown next to the name field in New Event  (e.g. Client, Artist, Couple)",
+                 bg=BG, fg=DIM, font=(F_UI, 10)
+                 ).pack(anchor="w", padx=24, pady=(2, 0))
+        types_raw = ", ".join(self.settings.get("project_types", DEFAULT_PROJECT_TYPES))
+        types_entry = _field("Project Types",  types_raw)
+        tk.Label(win, text="Comma-separated list shown in the Project Type dropdown",
+                 bg=BG, fg=DIM, font=(F_UI, 10)
                  ).pack(anchor="w", padx=24, pady=(2, 0))
 
         def _save():
-            self.settings["volume"]      = vol_entry.get().rstrip("/")
-            self.settings["backup_dest"] = backup_entry.get().rstrip("/")
-            self.settings["jpg_dest"]    = jpg_entry.get().rstrip("/")
+            self.settings["volume"]        = vol_entry.get().rstrip("/")
+            self.settings["backup_dest"]   = backup_entry.get().rstrip("/")
+            self.settings["jpg_dest"]      = jpg_entry.get().rstrip("/")
+            self.settings["personal_root"] = personal_entry.get().strip() or "Personal"
+            self.settings["events_root"]   = events_entry.get().strip() or "Events"
+            self.settings["client_label"]  = client_entry.get().strip() or "Client Name"
+            raw_types = [t.strip() for t in types_entry.get().split(",") if t.strip()]
+            self.settings["project_types"] = raw_types if raw_types else DEFAULT_PROJECT_TYPES
             save_settings(self.settings)
+            # Update live UI
             self._vol_lbl.configure(text=self.settings["volume"])
             bd = self.settings["backup_dest"]
             self._backup_lbl.configure(text=bd or "not set", fg=GREY if bd else RED)
             self._jpg_lbl.configure(text=self._jpg_dest_display())
+            # Update New Event form labels/dropdown without rebuilding
+            self._ev_client_lbl.configure(text=self.settings["client_label"])
+            self._ev_type_cb.configure(values=self.settings["project_types"])
+            if self._ev_type.get() not in self.settings["project_types"]:
+                self._ev_type.set(self.settings["project_types"][0] if self.settings["project_types"] else "")
             win.destroy()
 
         tk.Button(win, text="Save",
                   bg=ACCENT, fg="#ffffff",
-                  font=("SF Pro Display", 13),
-                  bd=0, relief="flat", cursor="hand2", pady=10,
+                  font=(F_UI, 13),
+                  bd=0, relief="flat", pady=10,
                   activebackground=ACCENT_HOV, activeforeground="#ffffff",
                   command=_save).pack(fill="x", padx=24, pady=(14, 0))
 

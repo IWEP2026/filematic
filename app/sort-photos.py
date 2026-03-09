@@ -2,8 +2,18 @@
 """
 sort-photos.py — Personal media organiser
 ──────────────────────────────────────────
-Renames files using their capture/creation date and sorts them into:
-    Personal/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.ext
+Renames files using their capture/creation date and sorts them into
+type-separated subfolders:
+
+    Personal/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.raf   ← photos
+    Personal/Video/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.mp4
+    Personal/Audio/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.wav
+    Personal/Design/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.psd
+    Personal/Motion/YYYY/Week WW · Mon DD–DD/YYYY-MM-DD_HHMMSS_NNN.aep
+
+Photos (all RAW formats and standard images) stay at the Personal root.
+Video, audio, design files, and motion projects each go into their own
+subfolder so different file types and uses are never mixed.
 
 Supports:
   Photos  — Canon (CR2/CR3/CRW), Nikon (NEF/NRW), Sony (ARW/SR2/SRF),
@@ -32,11 +42,18 @@ Multi-camera sessions:
   the EXIF timestamp matters.
 
 Sidecar files travel with their source:
-  XMP (Lightroom/Capture One), PP3 (RawTherapee), DOP (DxO PhotoLab),
-  COS (Capture One), THM (camera thumbnails) are automatically moved
-  alongside their source file and renamed to match:
+  XMP (Lightroom/Capture One/Bridge/ACR), PP3 (RawTherapee), DOP (DxO PhotoLab),
+  COS (Capture One), THM (camera thumbnails), VRD/DR4 (Canon DPP recipe),
+  NKSC (Nikon NX Studio), SPD (Silkypix), ARP (AfterShot Pro) are automatically
+  moved alongside their source file and renamed to match.
+
+  Both naming conventions are handled:
+    DSC_0042.xmp      (stem-based — Lightroom, Capture One, most apps)
+    DSC_0042.RAF.xmp  (fullname-based — Darktable, some ACR exports)
+
+  Result either way:
     DSC_0042.RAF + DSC_0042.xmp  →  2026-03-08_143022_001.raf
-                                    2026-03-08_143022_001.xmp
+                                     2026-03-08_143022_001.xmp
 
 Date source priority:
   1. DateTimeOriginal (camera shutter / recorder start)
@@ -44,7 +61,10 @@ Date source priority:
   3. MediaCreateDate / TrackCreateDate (container-level)
   4. File modification date (last resort — logged as [MTIME])
 
-Requires: exiftool  →  brew install exiftool
+Requires: exiftool
+  macOS:   brew install exiftool
+  Linux:   sudo apt install libimage-exiftool-perl  (or dnf/pacman equivalent)
+  Windows: choco install exiftool  (or download from https://exiftool.org)
 
 ━━━ USAGE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -56,6 +76,10 @@ Requires: exiftool  →  brew install exiftool
 
   Ingest from a memory card or drive (move files onto the SSD):
     python3 sort-photos.py --ingest /Volumes/CARD /Volumes/Photography/Personal
+
+  Rename files in-place using their EXIF date (no subfolders created):
+    python3 sort-photos.py --rename-only /Volumes/Photography/Events/CLIENT/Completed
+    Files under a "Best Images" subfolder are left completely untouched.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
@@ -184,8 +208,6 @@ DESIGN_EXTENSIONS = {
     '.usd', '.usda', '.usdc', '.usdz',        # Universal Scene Description (Apple AR)
     # Colour grading (LUTs)
     '.cube', '.3dl', '.look',                 # LUT files
-    # Lightroom
-    '.lrcat', '.lrtemplate',
 }
 
 MOTION_EXTENSIONS = {
@@ -220,11 +242,18 @@ DATE_TAGS = [
 # ── Helpers ────────────────────────────────────────────────────────
 
 def check_exiftool():
-    result = subprocess.run(['which', 'exiftool'], capture_output=True)
-    if result.returncode != 0:
+    import shutil as _shutil
+    if not _shutil.which('exiftool'):
         print("\n❌  exiftool not found.")
-        print("    Install it with:  brew install exiftool")
-        print("    (If you don't have Homebrew: https://brew.sh)\n")
+        if sys.platform == "darwin":
+            print("    macOS:   brew install exiftool")
+        elif sys.platform.startswith("linux"):
+            print("    Linux:   sudo apt install libimage-exiftool-perl")
+            print("             (or: dnf install perl-Image-ExifTool / pacman -S perl-image-exiftool)")
+        else:
+            print("    Windows: choco install exiftool")
+            print("             (or download from https://exiftool.org)")
+        print()
         sys.exit(1)
 
 
@@ -292,13 +321,18 @@ def week_folder_name(dt: datetime):
 # When a media file is moved, any sidecar with the same stem is moved too,
 # renamed to match the new media filename (e.g. 2026-03-08_143022_001.xmp).
 SIDECAR_EXTENSIONS = {
-    '.xmp',    # Lightroom / Capture One / Bridge edit metadata
+    '.xmp',    # Lightroom / Capture One / Bridge / ACR edit metadata
     '.pp3',    # RawTherapee processing profile
     '.pp',     # RawTherapee (older)
     '.dop',    # DxO PhotoLab sidecar
     '.cos',    # Capture One settings
     '.lrprev', # Lightroom preview cache
     '.thm',    # Camera-generated thumbnail (Canon, Sony)
+    '.vrd',    # Canon Digital Photo Professional recipe (v1–3)
+    '.dr4',    # Canon Digital Photo Professional recipe (v4)
+    '.nksc',   # Nikon ViewNX-i / NX Studio sidecar
+    '.spd',    # Silkypix Developer Studio sidecar
+    '.arp',    # Corel AfterShot Pro sidecar
 }
 
 
@@ -321,9 +355,10 @@ def move_sidecars(source_file: Path, dest_file: Path, dry_run: bool):
       DSC_0042.xmp  →  2026-03-08_143022_001.xmp   (same folder)
       DSC_0042.pp3  →  2026-03-08_143022_001.pp3
     """
-    stem = source_file.stem
+    stem = source_file.stem                # e.g. "DSC_0042"
+    full_name = source_file.name           # e.g. "DSC_0042.RAF" (for multi-ext sidecars)
     source_dir = source_file.parent
-    dest_stem = dest_file.stem   # e.g. "2026-03-08_143022_001"
+    dest_stem = dest_file.stem             # e.g. "2026-03-08_143022_001"
     dest_dir = dest_file.parent
 
     # Normalise to lowercase for dedup — macOS Path.resolve() preserves the
@@ -331,8 +366,17 @@ def move_sidecars(source_file: Path, dest_file: Path, dry_run: bool):
     # would compare as different even though they're the same file.
     seen: set[str] = set()
     for sidecar_ext in SIDECAR_EXTENSIONS:
-        # Check both lower and upper case (cameras write .XMP, .THM etc.)
-        for candidate in (stem + sidecar_ext, stem + sidecar_ext.upper()):
+        # Two naming conventions used by different apps:
+        #   stem-based:      DSC_0042.xmp      (Lightroom, Capture One, most apps)
+        #   fullname-based:  DSC_0042.RAF.xmp  (Darktable, some ACR exports)
+        # Check both, and both lower/upper case variants.
+        candidates = [
+            stem + sidecar_ext,
+            stem + sidecar_ext.upper(),
+            full_name + sidecar_ext,
+            full_name + sidecar_ext.upper(),
+        ]
+        for candidate in candidates:
             sidecar = source_dir / candidate
             if not sidecar.exists():
                 continue
@@ -349,13 +393,98 @@ def move_sidecars(source_file: Path, dest_file: Path, dry_run: bool):
                     print(f"         (skipped — destination exists)")
 
 
+# ── Orphan sidecar rescue ───────────────────────────────────────────
+
+def _rescue_orphan_sidecars(
+    source_dir: Path,
+    dest_dir: Path,
+    stem_index: dict,   # lowercase original stem → new dest Path
+    dry_run: bool,
+):
+    """
+    After the main sort pass, find any sidecar files left behind that have
+    no matching media file in their current directory.
+
+    Two outcomes:
+      A) A matching media file WAS sorted this run (tracked in stem_index).
+         → Move the sidecar to sit alongside that new file, renamed to match.
+      B) No match found anywhere (truly orphaned — source deleted, etc.).
+         → Sort the sidecar by its own embedded date into the week folder,
+           keeping its original filename so it's not silently lost.
+    """
+    orphans = [
+        f for f in source_dir.rglob('*')
+        if f.is_file() and f.suffix.lower() in SIDECAR_EXTENSIONS
+    ]
+    if not orphans:
+        return
+
+    print(f"\n  Checking {len(orphans)} orphaned sidecar(s)…")
+
+    for sidecar in orphans:
+        ext_lower = sidecar.suffix.lower()
+
+        # Derive the "owner" stem in two ways:
+        #   stem-based:      DSC_0042.xmp      → owner_stem = "dsc_0042"
+        #   fullname-based:  DSC_0042.RAF.xmp  → owner_stem = "dsc_0042"
+        #   (Path.stem strips only the last suffix, so .stem of DSC_0042.RAF is DSC_0042)
+        raw_stem   = Path(sidecar.stem).stem.lower()   # handles double-ext
+        plain_stem = sidecar.stem.lower()
+
+        # Check if this sidecar still has a buddy in the SAME directory
+        # (shouldn't happen — these are the ones left behind — but be safe)
+        has_local_buddy = any(
+            (sidecar.parent / (sidecar.stem + ext)).exists()
+            for ext in MEDIA_EXTENSIONS
+        )
+        if has_local_buddy:
+            continue  # will be caught by move_sidecars on next sort run
+
+        # Case A: media file was moved this run — we know where it went
+        new_media = stem_index.get(plain_stem) or stem_index.get(raw_stem)
+        if new_media and new_media.exists():
+            new_name   = new_media.stem + ext_lower
+            sidecar_dest = new_media.parent / new_name
+            print(f"  + orphan → reunite: {sidecar.name}  →  {sidecar_dest.relative_to(dest_dir)}")
+            if not dry_run:
+                if not sidecar_dest.exists():
+                    shutil.move(str(sidecar), str(sidecar_dest))
+                else:
+                    print(f"    (skipped — destination exists)")
+            continue
+
+        # Case B: truly orphaned — rename by its own date, sort to week folder
+        try:
+            dt, date_source = get_media_date(sidecar)
+            week_name, iso_year = week_folder_name(dt)
+            dest_folder = dest_dir / str(iso_year) / week_name
+
+            # Generate a date-based name (same convention as media files)
+            seq = 1
+            new_name = make_filename(dt, ext_lower, seq)
+            while (dest_folder / new_name).exists():
+                seq += 1
+                new_name = make_filename(dt, ext_lower, seq)
+
+            sidecar_dest = dest_folder / new_name
+            flag = f" [{date_source}]" if date_source != 'DateTimeOriginal' else ""
+            print(f"  + orphan → by date: {sidecar.name}{flag}  →  {sidecar_dest.relative_to(dest_dir)}")
+            if not dry_run:
+                dest_folder.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(sidecar), str(sidecar_dest))
+        except Exception as e:
+            print(f"  ❌  orphan {sidecar.name}: {e}")
+
+
 # ── Core ───────────────────────────────────────────────────────────
 
 def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
-    # Gather all media files recursively
+    # Gather all media files recursively (skip macOS resource fork ._* files)
     files = sorted([
         f for f in source_dir.rglob('*')
-        if f.is_file() and f.suffix.lower() in MEDIA_EXTENSIONS
+        if f.is_file()
+        and f.suffix.lower() in MEDIA_EXTENSIONS
+        and not f.name.startswith('._')
     ])
 
     if not files:
@@ -388,15 +517,31 @@ def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
 
     moved = skipped = errors = 0
 
-    # Track used filenames per destination folder to handle same-second bursts
+    # Track used filenames per destination folder to handle same-second bursts.
+    # Also track original stem → new dest path so orphaned sidecars can be reunited.
     used: dict = {}
+    stem_index: dict = {}   # lowercase original stem → new dest Path
 
     for filepath in files:
         try:
             dt, date_source = get_media_date(filepath)
             week_name, iso_year = week_folder_name(dt)
 
-            dest_folder = dest_dir / str(iso_year) / week_name
+            # Route each type into its own subfolder so photos, video,
+            # audio, design, and motion projects never share a folder.
+            ext_lower = filepath.suffix.lower()
+            if ext_lower in VIDEO_EXTENSIONS:
+                type_root = dest_dir / "Video"
+            elif ext_lower in AUDIO_EXTENSIONS:
+                type_root = dest_dir / "Audio"
+            elif ext_lower in DESIGN_EXTENSIONS:
+                type_root = dest_dir / "Design"
+            elif ext_lower in MOTION_EXTENSIONS:
+                type_root = dest_dir / "Motion"
+            else:
+                type_root = dest_dir   # photos stay at the root
+
+            dest_folder = type_root / str(iso_year) / week_name
 
             # Find a non-colliding filename (burst shots share same timestamp)
             seq = 1
@@ -420,6 +565,9 @@ def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
                 dest_folder.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(filepath), str(dest_file))
 
+            # Record original stem so orphaned sidecars can find their new home
+            stem_index[filepath.stem.lower()] = dest_file
+
             # Move sidecar files (XMP, PP3, DOP, etc.) alongside their source
             move_sidecars(filepath, dest_file, dry_run)
 
@@ -428,6 +576,9 @@ def process(source_dir: Path, dest_dir: Path, dry_run: bool, ingest: bool):
         except Exception as e:
             print(f"  ❌  {filepath.name}: {e}")
             errors += 1
+
+    # Rescue any sidecar files left behind (orphaned or missed this pass)
+    _rescue_orphan_sidecars(source_dir, dest_dir, stem_index, dry_run)
 
     # Clean up empty folders left behind
     if not dry_run and not ingest:
@@ -452,15 +603,185 @@ def _remove_empty_dirs(root: Path):
                 pass
 
 
+# ── Orphan sidecar rename (rename-only mode) ───────────────────────
+
+def _rename_orphan_sidecars_in_place(folder: Path, stem_index: dict, dry_run: bool):
+    """
+    In rename-only mode, find sidecar files that have no matching media file
+    in the same directory and rename them to match the date-based convention.
+
+    Two cases:
+      A) Sidecar's source was renamed this run (in stem_index).
+         → Rename to match the new media filename.
+      B) Sidecar has no known source anywhere.
+         → Rename by its own embedded date.
+
+    Files under Best Images/ are always skipped.
+    """
+    orphans = [
+        f for f in folder.rglob('*')
+        if f.is_file()
+        and f.suffix.lower() in SIDECAR_EXTENSIONS
+        and 'Best Images' not in f.parts
+    ]
+    if not orphans:
+        return
+
+    print(f"\n  Checking {len(orphans)} companion sidecar(s)…")
+
+    for sidecar in orphans:
+        ext_lower    = sidecar.suffix.lower()
+        plain_stem   = sidecar.stem.lower()
+        raw_stem     = Path(sidecar.stem).stem.lower()
+
+        # Skip if a media buddy still exists right beside it (move_sidecars handled it)
+        has_buddy = any(
+            (sidecar.parent / (sidecar.stem + ext)).exists()
+            for ext in MEDIA_EXTENSIONS
+        )
+        if has_buddy:
+            continue
+
+        folder_key = str(sidecar.parent)
+
+        # Case A: source was renamed this run
+        new_media = stem_index.get(plain_stem) or stem_index.get(raw_stem)
+        if new_media:
+            new_name     = new_media.stem + ext_lower
+            sidecar_dest = sidecar.parent / new_name
+            if sidecar_dest == sidecar:
+                continue
+            print(f"  + companion: {sidecar.name}  →  {sidecar_dest.name}")
+            if not dry_run and not sidecar_dest.exists():
+                sidecar.rename(sidecar_dest)
+            continue
+
+        # Case B: rename by own date
+        try:
+            dt, date_source = get_media_date(sidecar)
+            seq = 1
+            new_name = make_filename(dt, ext_lower, seq)
+            while (sidecar.parent / new_name).exists():
+                seq += 1
+                new_name = make_filename(dt, ext_lower, seq)
+            sidecar_dest = sidecar.parent / new_name
+            if sidecar_dest == sidecar:
+                continue
+            flag = f" [{date_source}]" if date_source != 'DateTimeOriginal' else ""
+            print(f"  + companion → by date: {sidecar.name}{flag}  →  {new_name}")
+            if not dry_run:
+                sidecar.rename(sidecar_dest)
+        except Exception as e:
+            print(f"  ❌  companion {sidecar.name}: {e}")
+
+
+# ── Rename-only mode ───────────────────────────────────────────────
+
+def rename_in_place(folder: Path, dry_run: bool):
+    """
+    Rename all media files in `folder` using their EXIF capture date.
+    Files are renamed in-place — no subfolders are created, nothing is moved.
+
+    Files that already have the correct date-based name are skipped.
+    Files under a 'Best Images' subdirectory are left completely untouched.
+    Sidecar files (XMP, PP3, DOP, etc.) are renamed alongside their source.
+    """
+    files = sorted([
+        f for f in folder.rglob('*')
+        if f.is_file()
+        and f.suffix.lower() in MEDIA_EXTENSIONS
+        and 'Best Images' not in f.parts
+        and not f.name.startswith('._')
+    ])
+
+    if not files:
+        print(f"  No supported files found in {folder}")
+        print("  (Files inside 'Best Images' subfolders are always skipped.)")
+        return
+
+    print(f"\n{'[DRY RUN] ' if dry_run else ''}Mode: RENAME-ONLY")
+    print(f"Folder: {folder}")
+    print(f"Files:  {len(files)}\n")
+
+    # Track used names per directory to handle burst shots in the same folder.
+    # Also build stem_index so orphaned sidecars can be renamed to match.
+    used: dict = {}
+    stem_index: dict = {}   # lowercase original stem → new Path
+    renamed = already_correct = errors = 0
+
+    for filepath in files:
+        try:
+            dt, date_source = get_media_date(filepath)
+
+            folder_key = str(filepath.parent)
+            if folder_key not in used:
+                used[folder_key] = set()
+
+            seq = 1
+            ext = filepath.suffix
+            candidate = make_filename(dt, ext, seq)
+            while candidate in used[folder_key]:
+                seq += 1
+                candidate = make_filename(dt, ext, seq)
+            used[folder_key].add(candidate)
+
+            dest_file = filepath.parent / candidate
+
+            if dest_file == filepath:
+                print(f"  ─  {filepath.name}  (already correct)")
+                stem_index[filepath.stem.lower()] = dest_file
+                already_correct += 1
+                continue
+
+            flag = f"[{date_source}]" if date_source != 'DateTimeOriginal' else ""
+            print(f"  {'[DRY RUN] ' if dry_run else ''}→  {filepath.name}  →  {candidate}  {flag}")
+
+            if not dry_run:
+                filepath.rename(dest_file)
+
+            stem_index[filepath.stem.lower()] = dest_file
+            move_sidecars(filepath, dest_file, dry_run)
+            renamed += 1
+
+        except Exception as e:
+            print(f"  ❌  {filepath.name}: {e}")
+            errors += 1
+
+    # Rename any companion sidecars that were left behind (no live media buddy)
+    _rename_orphan_sidecars_in_place(folder, stem_index, dry_run)
+
+    print(f"\n{'[DRY RUN] ' if dry_run else ''}{'─' * 40}")
+    print(f"  Renamed         : {renamed}")
+    print(f"  Already correct : {already_correct}")
+    print(f"  Errors          : {errors}")
+    if dry_run:
+        print("\n  Nothing was changed. Remove --dry-run to apply.\n")
+    else:
+        print()
+
+
 # ── Entry point ────────────────────────────────────────────────────
 
 def main():
     check_exiftool()
 
     args = sys.argv[1:]
-    dry_run = '--dry-run' in args
-    ingest  = '--ingest'  in args
-    paths   = [a for a in args if not a.startswith('--')]
+    dry_run     = '--dry-run'     in args
+    ingest      = '--ingest'      in args
+    rename_only = '--rename-only' in args
+    paths       = [a for a in args if not a.startswith('--')]
+
+    if rename_only:
+        if len(paths) < 1:
+            print(__doc__)
+            print("  ⚠️  --rename-only requires: <folder>\n")
+            sys.exit(1)
+        folder = Path(paths[0])
+        if not folder.exists():
+            print(f"\n❌  Folder not found: {folder}\n")
+            sys.exit(1)
+        rename_in_place(folder, dry_run=dry_run)
+        return
 
     if ingest:
         if len(paths) < 2:

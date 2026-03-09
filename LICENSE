@@ -1,6 +1,6 @@
 Polyform Noncommercial License 1.0.0
 
-Copyright (c) 2026 — File Sorting App contributors
+Copyright (c) 2026 — Filematic contributors
 
 Acceptance
 
@@ -52,9 +52,9 @@ Any purpose is a permitted purpose except:
 3. Using the software to provide a commercial service to others
    (including charging for support, hosting, or integration).
 
-4. Using the software or its outputs to train, fine-tune, or improve
-   any machine learning model, AI system, or commercial product without
-   explicit written permission from the original author(s).
+4. Using this codebase as training data, fine-tuning data, or evaluation
+   data for any machine learning model or AI system. Using AI tools to
+   develop, modify, or fork this software is explicitly permitted.
 
 5. Any use that primarily benefits a commercial entity at the expense
    of the open-source community this software is intended to serve.
@@ -103,4 +103,5 @@ In plain English:
   ✓ Free to use in your own non-commercial projects
   ✗ Cannot sell it or charge for access to it
   ✗ Cannot bundle it into a paid product or SaaS
-  ✗ Cannot use it to train AI/ML models or commercial systems
+  ✗ Cannot use this codebase as training data for AI/ML models
+  ✓ Using AI tools to develop or fork this software is fine
